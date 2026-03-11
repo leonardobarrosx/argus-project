@@ -3050,8 +3050,8 @@ function MobileNav({ page, onChangePage }: { page: PageKey; onChangePage: (p: Pa
               key={item.key}
               data-active={active}
               onClick={() => onChangePage(item.key)}
-              className={`flex shrink-0 flex-col items-center gap-0.5 rounded-xl px-3.5 py-1.5 text-[10px] font-semibold transition ${active ? 'bg-brand-50 text-brand-600' : 'text-slate-400 active:bg-slate-50'}`}
-              style={{ scrollSnapAlign: 'center' }}
+              className={`flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl py-2 text-[10px] font-semibold transition ${active ? 'bg-brand-50 text-brand-600' : 'text-slate-400 active:bg-slate-50'}`}
+              style={{ scrollSnapAlign: 'center', minWidth: 'calc(25vw - 8px)' }}
             >
               <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.7} />
               <span className="whitespace-nowrap">{item.label}</span>
