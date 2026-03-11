@@ -13,21 +13,36 @@
 html {
   overflow-x: hidden;
   scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
 body {
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: 'Plus Jakarta Sans', Inter, ui-sans-serif, system-ui, sans-serif;
   color: #0f172a;
   background-color: #f8fafc;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
 }
 
 #root {
   display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Safe area for mobile bottom nav */
+.safe-b {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Ensure touch scrolling works everywhere */
+.overflow-y-auto,
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Subtle scrollbar */

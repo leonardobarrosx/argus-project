@@ -5,14 +5,14 @@ import {
   Download, FileText, Filter, FlaskConical, Gift, LayoutDashboard, MessageCircle,
   Microscope, Package, Plus, Search, Send, ShoppingCart,
   Sparkles, Stethoscope, TrendingDown, TrendingUp, UserPlus,
-  UserRound, Users, X, History, Phone, Glasses, Trash2,
+  UserRound, Users, X, History, Phone, Glasses, Trash2, Briefcase, Mail, Edit2,
 } from 'lucide-react'
 
 /* ================================================================== */
 /*  TYPES                                                              */
 /* ================================================================== */
 
-type PageKey = 'overview' | 'pdv' | 'patients' | 'lab' | 'stock' | 'reports'
+type PageKey = 'overview' | 'pdv' | 'patients' | 'lab' | 'stock' | 'collaborators' | 'reports'
 
 interface RxData { sph: string; cyl: string; axis: string; add: string; dnp: string; height: string }
 
@@ -70,7 +70,11 @@ interface StockItem {
   qty: number
   min: number
   price: number
+  costPrice: number
+  commissionPct: number
   category: string
+  supplier: string
+  invoiceNumber: string
 }
 
 interface Notification {
@@ -114,9 +118,21 @@ interface StockMovement {
   qty: number
   type: 'in' | 'out'
   date: string
-  reason: 'service_order' | 'sale' | 'manual_adjustment'
+  reason: 'service_order' | 'sale' | 'manual_adjustment' | 'purchase'
   orderId?: string
   prescriptionId?: number
+  invoiceNumber?: string
+}
+
+interface Collaborator {
+  id: number
+  name: string
+  role: 'optometrista' | 'vendedor' | 'montador' | 'atendente' | 'gerente'
+  phone: string
+  email: string
+  commissionPct: number
+  active: boolean
+  createdAt: string
 }
 
 interface CampaignFilter {
@@ -132,6 +148,7 @@ interface PersistedState {
   sales: Sale[]
   stockMovements: StockMovement[]
   dismissedNotifs: string[]
+  collaborators: Collaborator[]
 }
 
 /* ================================================================== */
@@ -148,6 +165,7 @@ const NAV: { key: PageKey; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'patients', label: 'Pacientes', icon: UserRound },
   { key: 'lab', label: 'Laboratório', icon: FlaskConical },
   { key: 'stock', label: 'Estoque', icon: Boxes },
+  { key: 'collaborators', label: 'Equipe', icon: Briefcase },
   { key: 'reports', label: 'Relatórios', icon: BarChart3 },
 ]
 
@@ -221,14 +239,14 @@ const seedPatients = (): Patient[] => [
 ]
 
 const seedStock = (): StockItem[] => [
-  { id: 1, name: 'Lentes Blue Light 1.59', qty: 10, min: 10, price: 189.90, category: 'Lentes' },
-  { id: 2, name: 'Armação Titan Slim M', qty: 3, min: 8, price: 320.00, category: 'Armações' },
-  { id: 3, name: 'Lente Progres. Office', qty: 4, min: 5, price: 350.00, category: 'Lentes' },
-  { id: 4, name: 'Armação Classic Round G', qty: 21, min: 10, price: 280.00, category: 'Armações' },
-  { id: 5, name: 'Lentes Transitions Gen8', qty: 7, min: 6, price: 450.00, category: 'Lentes' },
-  { id: 6, name: 'Flanela de microfibra', qty: 48, min: 20, price: 15.00, category: 'Acessórios' },
-  { id: 7, name: 'Antirreflexo Premium', qty: 18, min: 8, price: 120.00, category: 'Tratamentos' },
-  { id: 8, name: 'Estojo rígido premium', qty: 30, min: 15, price: 35.00, category: 'Acessórios' },
+  { id: 1, name: 'Lentes Blue Light 1.59', qty: 10, min: 10, price: 189.90, costPrice: 85.00, commissionPct: 5, category: 'Lentes', supplier: 'Zeiss Brasil', invoiceNumber: '' },
+  { id: 2, name: 'Armação Titan Slim M', qty: 3, min: 8, price: 320.00, costPrice: 120.00, commissionPct: 8, category: 'Armações', supplier: 'Chilli Beans', invoiceNumber: '' },
+  { id: 3, name: 'Lente Progres. Office', qty: 4, min: 5, price: 350.00, costPrice: 150.00, commissionPct: 5, category: 'Lentes', supplier: 'Essilor', invoiceNumber: '' },
+  { id: 4, name: 'Armação Classic Round G', qty: 21, min: 10, price: 280.00, costPrice: 95.00, commissionPct: 8, category: 'Armações', supplier: 'Ray-Ban', invoiceNumber: '' },
+  { id: 5, name: 'Lentes Transitions Gen8', qty: 7, min: 6, price: 450.00, costPrice: 200.00, commissionPct: 5, category: 'Lentes', supplier: 'Transitions Optical', invoiceNumber: '' },
+  { id: 6, name: 'Flanela de microfibra', qty: 48, min: 20, price: 15.00, costPrice: 3.50, commissionPct: 0, category: 'Acessórios', supplier: 'Genérico', invoiceNumber: '' },
+  { id: 7, name: 'Antirreflexo Premium', qty: 18, min: 8, price: 120.00, costPrice: 45.00, commissionPct: 5, category: 'Tratamentos', supplier: 'Hoya', invoiceNumber: '' },
+  { id: 8, name: 'Estojo rígido premium', qty: 30, min: 15, price: 35.00, costPrice: 12.00, commissionPct: 0, category: 'Acessórios', supplier: 'Genérico', invoiceNumber: '' },
 ]
 
 const seedPrescriptions = (): Prescription[] => [
@@ -408,8 +426,8 @@ function ArgusLogo({ size = 28 }: { size?: number }) {
 function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; wide?: boolean }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/30 py-10 backdrop-blur-sm" onClick={onClose}>
-      <div className={`mx-4 w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} animate-fadeIn rounded-2xl bg-white shadow-dropdown`} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/30 px-3 py-6 sm:py-10 backdrop-blur-sm" onClick={onClose}>
+      <div className={`w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} animate-fadeIn rounded-2xl bg-white shadow-dropdown`} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <h3 className="text-base font-semibold text-slate-900">{title}</h3>
           <button onClick={onClose} className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"><X className="h-5 w-5" /></button>
@@ -465,7 +483,7 @@ function NotificationDropdown({ notifications, open, onClose, onMarkRead, onMark
   const typeIcon: Record<string, string> = { stock: '📦', birthday: '🎂', prescription: '💊', order: '✅', info: 'ℹ️' }
 
   return (
-    <div ref={ref} className="absolute right-0 top-full z-50 mt-2 w-[min(92vw,380px)] animate-fadeIn rounded-2xl bg-white shadow-dropdown">
+    <div ref={ref} className="absolute right-0 top-full z-50 mt-2 w-[min(85vw,380px)] animate-fadeIn rounded-2xl bg-white shadow-dropdown sm:right-0 -right-2">
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-slate-900">Notificações</h3>
@@ -625,6 +643,13 @@ export default function App() {
   const [stockMovements, setStockMovements] = useState<StockMovement[]>(() =>
     Array.isArray(initialPersisted?.stockMovements) ? initialPersisted.stockMovements : [],
   )
+  const [collaborators, setCollaborators] = useState<Collaborator[]>(() =>
+    Array.isArray(initialPersisted?.collaborators) ? initialPersisted.collaborators : [
+      { id: 1, name: 'Eliza Silva', role: 'gerente', phone: '(11) 99999-0001', email: 'eliza@argus.com', commissionPct: 0, active: true, createdAt: '01/01/2026' },
+      { id: 2, name: 'Carlos Mendes', role: 'optometrista', phone: '(11) 99999-0002', email: 'carlos@argus.com', commissionPct: 3, active: true, createdAt: '01/01/2026' },
+      { id: 3, name: 'Julia Santos', role: 'vendedor', phone: '(11) 99999-0003', email: 'julia@argus.com', commissionPct: 8, active: true, createdAt: '15/01/2026' },
+    ],
+  )
 
   // Dynamic notifications from real data
   const dynamicNotifs = useMemo(() => computeNotifications(patients, prescriptions, orders, stock), [patients, prescriptions, orders, stock])
@@ -685,6 +710,20 @@ export default function App() {
   const [pdvGenerateOs, setPdvGenerateOs] = useState(true)
   const [pdvOsPaid, setPdvOsPaid] = useState(true)
 
+  // ── Stock: new product modal ──
+  const [newProductOpen, setNewProductOpen] = useState(false)
+  const [newProductForm, setNewProductForm] = useState({
+    name: '', category: 'Armações', qty: '', min: '', costPrice: '', salePrice: '',
+    commissionPct: '', supplier: '', invoiceNumber: '',
+  })
+
+  // ── Collaborators ──
+  const [newCollabOpen, setNewCollabOpen] = useState(false)
+  const [newCollabForm, setNewCollabForm] = useState({
+    name: '', role: 'vendedor' as Collaborator['role'], phone: '', email: '', commissionPct: '',
+  })
+  const [editCollabId, setEditCollabId] = useState<number | null>(null)
+
   useEffect(() => {
     if (!systemMessage) return
     const t = setTimeout(() => setSystemMessage(''), 4500)
@@ -710,8 +749,9 @@ export default function App() {
       sales,
       stockMovements,
       dismissedNotifs: Array.from(dismissedNotifs),
+      collaborators,
     })
-  }, [patients, stock, prescriptions, orders, sales, stockMovements, dismissedNotifs])
+  }, [patients, stock, prescriptions, orders, sales, stockMovements, dismissedNotifs, collaborators])
 
   // Helpers
   const getPatient = (id: number) => patients.find(p => p.id === id)
@@ -1052,6 +1092,46 @@ export default function App() {
     setStockEditId(null); setStockEditQty('')
   }
 
+  // ── Add new product to stock ──
+  const addNewProduct = () => {
+    const { name, category, qty, costPrice, salePrice, commissionPct, min, supplier, invoiceNumber } = newProductForm
+    if (!name.trim() || !qty || !salePrice) return
+    const qtyN = parseInt(qty, 10); const priceN = parseFloat(salePrice); const costN = parseFloat(costPrice) || 0
+    const commN = parseFloat(commissionPct) || 0; const minN = parseInt(min, 10) || 3
+    if (isNaN(qtyN) || qtyN < 0 || isNaN(priceN) || priceN <= 0) return
+    const newId = Date.now()
+    const newItem: StockItem = { id: newId, name: name.trim(), category, qty: qtyN, min: minN, price: priceN, costPrice: costN, commissionPct: commN, supplier: supplier.trim(), invoiceNumber: invoiceNumber.trim() }
+    setStock(prev => [...prev, newItem])
+    if (qtyN > 0) {
+      setStockMovements(prev => [...prev, { id: Date.now() + 1, stockItemId: newId, qty: qtyN, type: 'in', date: TODAY, reason: 'purchase', invoiceNumber: invoiceNumber.trim() || undefined }])
+    }
+    setNewProductForm({ name: '', category: 'Armações', qty: '', min: '', costPrice: '', salePrice: '', commissionPct: '', supplier: '', invoiceNumber: '' })
+    setNewProductOpen(false)
+    setSystemMessage('Produto adicionado ao estoque!')
+  }
+
+  // ── Collaborator CRUD ──
+  const saveCollaborator = () => {
+    const { name, role, phone, email, commissionPct } = newCollabForm
+    if (!name.trim()) return
+    const commN = parseFloat(commissionPct) || 0
+    if (editCollabId !== null) {
+      setCollaborators(prev => prev.map(c => c.id === editCollabId ? { ...c, name: name.trim(), role, phone: phone.trim(), email: email.trim(), commissionPct: commN } : c))
+      setEditCollabId(null)
+    } else {
+      setCollaborators(prev => [...prev, { id: Date.now(), name: name.trim(), role, phone: phone.trim(), email: email.trim(), commissionPct: commN, active: true, createdAt: TODAY }])
+    }
+    setNewCollabForm({ name: '', role: 'vendedor', phone: '', email: '', commissionPct: '' })
+    setNewCollabOpen(false)
+    setSystemMessage(editCollabId !== null ? 'Colaborador atualizado!' : 'Colaborador adicionado!')
+  }
+  const toggleCollaboratorActive = (id: number) => setCollaborators(prev => prev.map(c => c.id === id ? { ...c, active: !c.active } : c))
+  const startEditCollaborator = (c: Collaborator) => {
+    setNewCollabForm({ name: c.name, role: c.role, phone: c.phone, email: c.email, commissionPct: String(c.commissionPct) })
+    setEditCollabId(c.id)
+    setNewCollabOpen(true)
+  }
+
   // ── Campaign targets ──
   const campaignTargets = useMemo(() => {
     const targets: { patient: Patient; reason: string }[] = []
@@ -1107,10 +1187,10 @@ export default function App() {
       {/* ── Main ── */}
       <div className="flex flex-1 flex-col overflow-x-hidden pb-20 lg:pb-0">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center gap-4 border-b border-slate-200/50 bg-white/80 px-4 py-3 backdrop-blur-md sm:px-6">
+        <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-slate-200/50 bg-white/80 px-3 py-3 backdrop-blur-md sm:gap-4 sm:px-6">
           <div className="mr-1 lg:hidden"><ArgusLogo size={24} /></div>
           <SmartSearch patients={patients} orders={orders} onSelectPatient={p => setSelectedPatientId(p.id)} onSelectOrder={o => setOrderDetailId(o.id)} />
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0">
             <div className="relative">
               <button onClick={() => setNotifOpen(p => !p)} className="relative rounded-xl p-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-600">
                 <Bell className="h-[18px] w-[18px]" />
@@ -1119,9 +1199,9 @@ export default function App() {
               <NotificationDropdown notifications={notifications} open={notifOpen} onClose={() => setNotifOpen(false)} onMarkRead={markRead} onMarkAllRead={markAllRead} />
             </div>
             <div className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">AS</div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-xs font-bold text-white">ES</div>
               <div className="hidden sm:block">
-                <p className="text-[13px] font-semibold leading-tight text-slate-800">Dra. Ana Silva</p>
+                <p className="text-[13px] font-semibold leading-tight text-slate-800">Dra. Eliza Silva</p>
                 <p className="text-[11px] leading-tight text-slate-400">Gestora</p>
               </div>
               <ChevronDown className="hidden h-3.5 w-3.5 text-slate-300 sm:block" />
@@ -1157,8 +1237,9 @@ export default function App() {
             {page === 'lab' && <LabPage orders={orders} patients={patients} prescriptions={prescriptions} stock={stock} sales={sales}
               onAdvanceOrder={advanceOrder} onNewOS={(rxId) => { setNewOsRxId(rxId); setNewOsOpen(true) }}
               onViewOrder={id => setOrderDetailId(id)} />}
-            {page === 'stock' && <StockPage stock={stock} suggestions={suggestions} movementCount={stockMovements.length} onEditStock={(id, qty) => { setStockEditId(id); setStockEditQty(String(qty)) }} />}
+            {page === 'stock' && <StockPage stock={stock} suggestions={suggestions} movementCount={stockMovements.length} onEditStock={(id, qty) => { setStockEditId(id); setStockEditQty(String(qty)) }} onNewProduct={() => setNewProductOpen(true)} />}
             {page === 'reports' && <ReportsPage patients={patients} prescriptions={prescriptions} orders={orders} sales={sales} stock={stock} />}
+            {page === 'collaborators' && <CollaboratorsPage collaborators={collaborators} onNew={() => { setEditCollabId(null); setNewCollabForm({ name: '', role: 'vendedor', phone: '', email: '', commissionPct: '' }); setNewCollabOpen(true) }} onEdit={startEditCollaborator} onToggleActive={toggleCollaboratorActive} />}
           </div>
         </main>
       </div>
@@ -1658,6 +1739,71 @@ export default function App() {
           </div>
         </div>
       </Modal>
+
+      {/* ── New product ── */}
+      <Modal open={newProductOpen} onClose={() => setNewProductOpen(false)} title="Novo produto no estoque" wide>
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FormField label="Nome do produto" value={newProductForm.name} onChange={v => setNewProductForm(p => ({ ...p, name: v }))} placeholder="Ex: Armação Ray-Ban Round" />
+            <SelectField label="Categoria" value={newProductForm.category} onChange={v => setNewProductForm(p => ({ ...p, category: v }))}
+              options={[{ value: 'Armações', label: 'Armações' }, { value: 'Lentes', label: 'Lentes' }, { value: 'Lentes de contato', label: 'Lentes de contato' }, { value: 'Acessórios', label: 'Acessórios' }, { value: 'Solar', label: 'Solar' }, { value: 'Produtos de limpeza', label: 'Produtos de limpeza' }]} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <FormField label="Quantidade" value={newProductForm.qty} onChange={v => setNewProductForm(p => ({ ...p, qty: v }))} placeholder="0" type="number" />
+            <FormField label="Estoque mínimo" value={newProductForm.min} onChange={v => setNewProductForm(p => ({ ...p, min: v }))} placeholder="3" type="number" />
+            <FormField label="Comissão %" value={newProductForm.commissionPct} onChange={v => setNewProductForm(p => ({ ...p, commissionPct: v }))} placeholder="5" type="number" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FormField label="Preço de custo (R$)" value={newProductForm.costPrice} onChange={v => setNewProductForm(p => ({ ...p, costPrice: v }))} placeholder="0.00" type="number" />
+            <FormField label="Preço de venda (R$)" value={newProductForm.salePrice} onChange={v => setNewProductForm(p => ({ ...p, salePrice: v }))} placeholder="0.00" type="number" />
+          </div>
+          {/* Auto-calculated margin */}
+          {(() => {
+            const cost = parseFloat(newProductForm.costPrice) || 0
+            const sale = parseFloat(newProductForm.salePrice) || 0
+            if (cost > 0 && sale > 0) {
+              const margin = ((sale - cost) / sale * 100)
+              const profit = sale - cost
+              return (
+                <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${margin >= 0 ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'}`}>
+                  <TrendingUp className={`h-4 w-4 ${margin >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} />
+                  <div>
+                    <p className={`text-sm font-semibold ${margin >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>Margem: {margin.toFixed(1)}%</p>
+                    <p className="text-xs text-slate-500">Lucro por unidade: R$ {profit.toFixed(2)}</p>
+                  </div>
+                </div>
+              )
+            }
+            return null
+          })()}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FormField label="Fornecedor" value={newProductForm.supplier} onChange={v => setNewProductForm(p => ({ ...p, supplier: v }))} placeholder="Ex: Luxottica" />
+            <FormField label="Nº Nota Fiscal (NF)" value={newProductForm.invoiceNumber} onChange={v => setNewProductForm(p => ({ ...p, invoiceNumber: v }))} placeholder="Ex: NF-00123" />
+          </div>
+          <button onClick={addNewProduct} disabled={!newProductForm.name.trim() || !newProductForm.qty || !newProductForm.salePrice}
+            className="mt-2 w-full rounded-xl bg-brand-500 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-40">
+            Adicionar ao estoque
+          </button>
+        </div>
+      </Modal>
+
+      {/* ── New / Edit collaborator ── */}
+      <Modal open={newCollabOpen} onClose={() => { setNewCollabOpen(false); setEditCollabId(null) }} title={editCollabId !== null ? 'Editar colaborador' : 'Novo colaborador'}>
+        <div className="space-y-3">
+          <FormField label="Nome completo" value={newCollabForm.name} onChange={v => setNewCollabForm(p => ({ ...p, name: v }))} placeholder="Ex: João Silva" />
+          <SelectField label="Função" value={newCollabForm.role} onChange={v => setNewCollabForm(p => ({ ...p, role: v as Collaborator['role'] }))}
+            options={[{ value: 'gerente', label: 'Gerente' }, { value: 'optometrista', label: 'Optometrista' }, { value: 'vendedor', label: 'Vendedor(a)' }, { value: 'montador', label: 'Montador(a)' }, { value: 'atendente', label: 'Atendente' }]} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FormField label="Telefone" value={newCollabForm.phone} onChange={v => setNewCollabForm(p => ({ ...p, phone: v }))} placeholder="(00) 00000-0000" />
+            <FormField label="E-mail" value={newCollabForm.email} onChange={v => setNewCollabForm(p => ({ ...p, email: v }))} placeholder="email@exemplo.com" />
+          </div>
+          <FormField label="Comissão (%)" value={newCollabForm.commissionPct} onChange={v => setNewCollabForm(p => ({ ...p, commissionPct: v }))} placeholder="5" type="number" />
+          <button onClick={saveCollaborator} disabled={!newCollabForm.name.trim()}
+            className="mt-2 w-full rounded-xl bg-brand-500 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-40">
+            {editCollabId !== null ? 'Salvar alterações' : 'Adicionar colaborador'}
+          </button>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -1705,7 +1851,7 @@ function OverviewPage({ patients, prescriptions, orders, stock, sales, suggestio
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[13px] text-slate-400">{TODAY} · {patients.length} pacientes · {prescriptions.length} receitas</p>
-          <h1 className="mt-1 text-xl font-semibold text-slate-900 sm:text-2xl">Bem-vinda, Dra. Ana</h1>
+          <h1 className="mt-1 text-xl font-semibold text-slate-900 sm:text-2xl">Bem-vinda, Dra. Eliza</h1>
         </div>
         <div className="flex gap-2">
           <button onClick={onOpenCampaign} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-brand-300 hover:text-brand-600">
@@ -2331,8 +2477,8 @@ function LabPage({ orders, patients, prescriptions, stock, sales, onAdvanceOrder
 }
 
 /* ─── STOCK ─── */
-function StockPage({ stock, suggestions, movementCount, onEditStock }: {
-  stock: StockItem[]; suggestions: Suggestion[]; movementCount: number; onEditStock: (id: number, qty: number) => void
+function StockPage({ stock, suggestions, movementCount, onEditStock, onNewProduct }: {
+  stock: StockItem[]; suggestions: Suggestion[]; movementCount: number; onEditStock: (id: number, qty: number) => void; onNewProduct: () => void
 }) {
   const [catFilter, setCatFilter] = useState('all')
   const [stockSearch, setStockSearch] = useState('')
@@ -2350,9 +2496,15 @@ function StockPage({ stock, suggestions, movementCount, onEditStock }: {
           <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Estoque</h1>
           <p className="mt-0.5 text-[13px] text-slate-400">{stock.length} produtos · {stock.reduce((s, i) => s + i.qty, 0)} unidades total · {movementCount} movimentação(ões)</p>
         </div>
-        {stock.filter(s => s.qty <= s.min).length > 0 && (
-          <Badge color="rose"><AlertTriangle className="h-3 w-3" />{stock.filter(s => s.qty <= s.min).length} abaixo do mínimo</Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {stock.filter(s => s.qty <= s.min).length > 0 && (
+            <Badge color="rose"><AlertTriangle className="h-3 w-3" />{stock.filter(s => s.qty <= s.min).length} abaixo do mínimo</Badge>
+          )}
+          <button onClick={onNewProduct}
+            className="flex items-center gap-1.5 rounded-xl bg-brand-500 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-brand-500/20 transition hover:bg-brand-600">
+            <Plus className="h-3.5 w-3.5" /> Novo produto
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -2373,18 +2525,20 @@ function StockPage({ stock, suggestions, movementCount, onEditStock }: {
         <div className="max-h-[520px] space-y-1.5 overflow-y-auto pr-1">
           {filtered.map(s => {
             const critical = s.qty <= s.min
+            const margin = s.costPrice > 0 ? ((s.price - s.costPrice) / s.price * 100) : 0
             return (
               <div key={s.id} className={`flex items-center justify-between rounded-xl px-3 py-3 transition ${critical ? 'bg-rose-50/60' : 'hover:bg-slate-50'}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${critical ? 'bg-rose-100 text-rose-500' : 'bg-brand-50 text-brand-500'}`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${critical ? 'bg-rose-100 text-rose-500' : 'bg-brand-50 text-brand-500'}`}>
                     <Package className="h-4 w-4" />
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{s.name}</p>
-                    <p className="text-xs text-slate-400">{s.category} · Mín: {s.min} · R$ {s.price.toFixed(2)}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{s.name}</p>
+                    <p className="text-xs text-slate-400 truncate">{s.category} · Mín: {s.min} · Venda: R$ {s.price.toFixed(2)}{s.costPrice > 0 ? ` · Custo: R$ ${s.costPrice.toFixed(2)} · Margem: ${margin.toFixed(0)}%` : ''}</p>
+                    {s.supplier && <p className="text-[11px] text-slate-300 truncate">Fornecedor: {s.supplier}{s.invoiceNumber ? ` · NF: ${s.invoiceNumber}` : ''}</p>}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
                     <p className={`text-sm font-bold ${critical ? 'text-rose-600' : 'text-slate-800'}`}>{s.qty}</p>
                     <p className="text-[11px] text-slate-400">unidades</p>
@@ -2416,6 +2570,120 @@ function StockPage({ stock, suggestions, movementCount, onEditStock }: {
 }
 
 /* ================================================================== */
+/*  COLLABORATORS PAGE                                                 */
+/* ================================================================== */
+
+const ROLE_LABELS: Record<Collaborator['role'], string> = {
+  gerente: 'Gerente', optometrista: 'Optometrista', vendedor: 'Vendedor(a)', montador: 'Montador(a)', atendente: 'Atendente',
+}
+const ROLE_COLORS: Record<Collaborator['role'], string> = {
+  gerente: 'bg-violet-100 text-violet-700', optometrista: 'bg-sky-100 text-sky-700', vendedor: 'bg-emerald-100 text-emerald-700',
+  montador: 'bg-amber-100 text-amber-700', atendente: 'bg-rose-100 text-rose-700',
+}
+
+function CollaboratorsPage({ collaborators, onNew, onEdit, onToggleActive }: {
+  collaborators: Collaborator[]; onNew: () => void; onEdit: (c: Collaborator) => void; onToggleActive: (id: number) => void
+}) {
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+  const roles = ['all', ...new Set(collaborators.map(c => c.role))]
+  const filtered = collaborators.filter(c => {
+    if (roleFilter !== 'all' && c.role !== roleFilter) return false
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+  const activeCount = collaborators.filter(c => c.active).length
+
+  return (
+    <>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Equipe</h1>
+          <p className="mt-0.5 text-[13px] text-slate-400">{collaborators.length} colaborador(es) · {activeCount} ativo(s)</p>
+        </div>
+        <button onClick={onNew}
+          className="flex items-center gap-1.5 rounded-xl bg-brand-500 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-brand-500/20 transition hover:bg-brand-600">
+          <UserPlus className="h-3.5 w-3.5" /> Novo colaborador
+        </button>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {roles.map(r => (
+          <button key={r} onClick={() => setRoleFilter(r)}
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${roleFilter === r ? 'bg-brand-500 text-white shadow-sm shadow-brand-500/20' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+            {r === 'all' ? 'Todos' : ROLE_LABELS[r as Collaborator['role']] || r}
+          </button>
+        ))}
+      </div>
+
+      <Card>
+        <div className="relative mb-3 max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar colaborador…"
+            className="h-9 w-full rounded-xl border border-slate-200/80 bg-slate-50/80 pl-10 pr-4 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100" />
+        </div>
+        <div className="max-h-[520px] space-y-1.5 overflow-y-auto pr-1">
+          {filtered.length === 0 && <p className="py-8 text-center text-sm text-slate-400">Nenhum colaborador encontrado</p>}
+          {filtered.map(c => (
+            <div key={c.id} className={`flex items-center justify-between rounded-xl px-3 py-3 transition ${c.active ? 'hover:bg-slate-50' : 'bg-slate-50/40 opacity-60'}`}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600 text-sm font-bold">
+                  {c.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-slate-800">{c.name}</p>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${ROLE_COLORS[c.role]}`}>
+                      {ROLE_LABELS[c.role]}
+                    </span>
+                    {!c.active && <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-400">Inativo</span>}
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                    {c.phone && <span className="flex items-center gap-1 text-xs text-slate-400"><Phone className="h-3 w-3" />{c.phone}</span>}
+                    {c.email && <span className="flex items-center gap-1 text-xs text-slate-400"><Mail className="h-3 w-3" />{c.email}</span>}
+                    {c.commissionPct > 0 && <span className="text-xs text-emerald-500 font-medium">{c.commissionPct}% comissão</span>}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => onEdit(c)} className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-400 transition hover:border-brand-300 hover:text-brand-600" title="Editar">
+                  <Edit2 className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={() => onToggleActive(c.id)}
+                  className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${c.active ? 'border-slate-200 bg-white text-slate-500 hover:border-rose-300 hover:text-rose-500' : 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}>
+                  {c.active ? 'Desativar' : 'Ativar'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Summary cards */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        {(['vendedor', 'optometrista', 'gerente'] as const).map(role => {
+          const count = collaborators.filter(c => c.role === role && c.active).length
+          const avgComm = count > 0 ? (collaborators.filter(c => c.role === role && c.active).reduce((s, c) => s + c.commissionPct, 0) / count) : 0
+          return (
+            <Card key={role}>
+              <div className="flex items-center gap-3">
+                <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${ROLE_COLORS[role]}`}>
+                  <Briefcase className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{ROLE_LABELS[role]}</p>
+                  <p className="text-xs text-slate-400">{count} ativo(s) · Comissão média: {avgComm.toFixed(1)}%</p>
+                </div>
+              </div>
+            </Card>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+/* ================================================================== */
 /*  MOBILE NAV (paginated RPG-style toolbar)                           */
 /* ================================================================== */
 
@@ -2433,7 +2701,7 @@ function MobileNav({ page, onChangePage }: { page: PageKey; onChangePage: (p: Pa
   }, [page, toolbarPage])
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/50 bg-white/95 backdrop-blur-md lg:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/50 bg-white/95 backdrop-blur-md safe-b lg:hidden">
       <div className="flex items-center">
         {/* Left arrow */}
         <button
