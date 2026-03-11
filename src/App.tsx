@@ -74,7 +74,6 @@ interface StockItem {
   commissionPct: number
   category: string
   supplier: string
-  invoiceNumber: string
 }
 
 interface Notification {
@@ -239,14 +238,14 @@ const seedPatients = (): Patient[] => [
 ]
 
 const seedStock = (): StockItem[] => [
-  { id: 1, name: 'Lentes Blue Light 1.59', qty: 10, min: 10, price: 189.90, costPrice: 85.00, commissionPct: 5, category: 'Lentes', supplier: 'Zeiss Brasil', invoiceNumber: '' },
-  { id: 2, name: 'Armação Titan Slim M', qty: 3, min: 8, price: 320.00, costPrice: 120.00, commissionPct: 8, category: 'Armações', supplier: 'Chilli Beans', invoiceNumber: '' },
-  { id: 3, name: 'Lente Progres. Office', qty: 4, min: 5, price: 350.00, costPrice: 150.00, commissionPct: 5, category: 'Lentes', supplier: 'Essilor', invoiceNumber: '' },
-  { id: 4, name: 'Armação Classic Round G', qty: 21, min: 10, price: 280.00, costPrice: 95.00, commissionPct: 8, category: 'Armações', supplier: 'Ray-Ban', invoiceNumber: '' },
-  { id: 5, name: 'Lentes Transitions Gen8', qty: 7, min: 6, price: 450.00, costPrice: 200.00, commissionPct: 5, category: 'Lentes', supplier: 'Transitions Optical', invoiceNumber: '' },
-  { id: 6, name: 'Flanela de microfibra', qty: 48, min: 20, price: 15.00, costPrice: 3.50, commissionPct: 0, category: 'Acessórios', supplier: 'Genérico', invoiceNumber: '' },
-  { id: 7, name: 'Antirreflexo Premium', qty: 18, min: 8, price: 120.00, costPrice: 45.00, commissionPct: 5, category: 'Tratamentos', supplier: 'Hoya', invoiceNumber: '' },
-  { id: 8, name: 'Estojo rígido premium', qty: 30, min: 15, price: 35.00, costPrice: 12.00, commissionPct: 0, category: 'Acessórios', supplier: 'Genérico', invoiceNumber: '' },
+  { id: 1, name: 'Lentes Blue Light 1.59', qty: 10, min: 10, price: 189.90, costPrice: 85.00, commissionPct: 5, category: 'Lentes', supplier: 'Zeiss Brasil' },
+  { id: 2, name: 'Armação Titan Slim M', qty: 3, min: 8, price: 320.00, costPrice: 120.00, commissionPct: 8, category: 'Armações', supplier: 'Chilli Beans' },
+  { id: 3, name: 'Lente Progres. Office', qty: 4, min: 5, price: 350.00, costPrice: 150.00, commissionPct: 5, category: 'Lentes', supplier: 'Essilor' },
+  { id: 4, name: 'Armação Classic Round G', qty: 21, min: 10, price: 280.00, costPrice: 95.00, commissionPct: 8, category: 'Armações', supplier: 'Ray-Ban' },
+  { id: 5, name: 'Lentes Transitions Gen8', qty: 7, min: 6, price: 450.00, costPrice: 200.00, commissionPct: 5, category: 'Lentes', supplier: 'Transitions Optical' },
+  { id: 6, name: 'Flanela de microfibra', qty: 48, min: 20, price: 15.00, costPrice: 3.50, commissionPct: 0, category: 'Acessórios', supplier: 'Genérico' },
+  { id: 7, name: 'Antirreflexo Premium', qty: 18, min: 8, price: 120.00, costPrice: 45.00, commissionPct: 5, category: 'Tratamentos', supplier: 'Hoya' },
+  { id: 8, name: 'Estojo rígido premium', qty: 30, min: 15, price: 35.00, costPrice: 12.00, commissionPct: 0, category: 'Acessórios', supplier: 'Genérico' },
 ]
 
 const seedPrescriptions = (): Prescription[] => [
@@ -713,9 +712,15 @@ export default function App() {
   // ── Stock: new product modal ──
   const [newProductOpen, setNewProductOpen] = useState(false)
   const [newProductForm, setNewProductForm] = useState({
-    name: '', category: 'Armações', qty: '', min: '', costPrice: '', salePrice: '',
-    commissionPct: '', supplier: '', invoiceNumber: '',
+    name: '', category: 'Armações', min: '', costPrice: '', salePrice: '',
+    commissionPct: '', supplier: '',
   })
+
+  // ── Stock: entry NF (batch purchase entry) ──
+  const [stockEntryOpen, setStockEntryOpen] = useState(false)
+  const [stockEntryNF, setStockEntryNF] = useState('')
+  const [stockEntrySupplier, setStockEntrySupplier] = useState('')
+  const [stockEntryItems, setStockEntryItems] = useState<{ stockItemId: number; qty: string; costPrice: string }[]>([])
 
   // ── Collaborators ──
   const [newCollabOpen, setNewCollabOpen] = useState(false)
@@ -1092,22 +1097,51 @@ export default function App() {
     setStockEditId(null); setStockEditQty('')
   }
 
-  // ── Add new product to stock ──
+  // ── Add new product to catalog ──
   const addNewProduct = () => {
-    const { name, category, qty, costPrice, salePrice, commissionPct, min, supplier, invoiceNumber } = newProductForm
-    if (!name.trim() || !qty || !salePrice) return
-    const qtyN = parseInt(qty, 10); const priceN = parseFloat(salePrice); const costN = parseFloat(costPrice) || 0
+    const { name, category, costPrice, salePrice, commissionPct, min, supplier } = newProductForm
+    if (!name.trim() || !salePrice) return
+    const priceN = parseFloat(salePrice); const costN = parseFloat(costPrice) || 0
     const commN = parseFloat(commissionPct) || 0; const minN = parseInt(min, 10) || 3
-    if (isNaN(qtyN) || qtyN < 0 || isNaN(priceN) || priceN <= 0) return
-    const newId = Date.now()
-    const newItem: StockItem = { id: newId, name: name.trim(), category, qty: qtyN, min: minN, price: priceN, costPrice: costN, commissionPct: commN, supplier: supplier.trim(), invoiceNumber: invoiceNumber.trim() }
+    if (isNaN(priceN) || priceN <= 0) return
+    const newItem: StockItem = { id: Date.now(), name: name.trim(), category, qty: 0, min: minN, price: priceN, costPrice: costN, commissionPct: commN, supplier: supplier.trim() }
     setStock(prev => [...prev, newItem])
-    if (qtyN > 0) {
-      setStockMovements(prev => [...prev, { id: Date.now() + 1, stockItemId: newId, qty: qtyN, type: 'in', date: TODAY, reason: 'purchase', invoiceNumber: invoiceNumber.trim() || undefined }])
-    }
-    setNewProductForm({ name: '', category: 'Armações', qty: '', min: '', costPrice: '', salePrice: '', commissionPct: '', supplier: '', invoiceNumber: '' })
+    setNewProductForm({ name: '', category: 'Armações', min: '', costPrice: '', salePrice: '', commissionPct: '', supplier: '' })
     setNewProductOpen(false)
-    setSystemMessage('Produto adicionado ao estoque!')
+    setSystemMessage('Produto cadastrado! Use "Entrada NF" para dar entrada no estoque.')
+  }
+
+  // ── Stock entry (batch purchase with NF) ──
+  const openStockEntry = (preSelectId?: number) => {
+    setStockEntryNF(''); setStockEntrySupplier('')
+    if (preSelectId) {
+      const item = stock.find(s => s.id === preSelectId)
+      setStockEntryItems([{ stockItemId: preSelectId, qty: '', costPrice: item?.costPrice ? String(item.costPrice) : '' }])
+      if (item?.supplier) setStockEntrySupplier(item.supplier)
+    } else {
+      setStockEntryItems([])
+    }
+    setStockEntryOpen(true)
+  }
+  const addStockEntryItem = () => setStockEntryItems(prev => [...prev, { stockItemId: 0, qty: '', costPrice: '' }])
+  const removeStockEntryItem = (idx: number) => setStockEntryItems(prev => prev.filter((_, i) => i !== idx))
+  const updateStockEntryItem = (idx: number, field: string, value: string | number) => setStockEntryItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item))
+  const submitStockEntry = () => {
+    const validItems = stockEntryItems.filter(ei => ei.stockItemId > 0 && parseInt(ei.qty, 10) > 0)
+    if (validItems.length === 0) return
+    const nf = stockEntryNF.trim(); const supplier = stockEntrySupplier.trim()
+    const newMovements: StockMovement[] = []
+    setStock(prev => prev.map(s => {
+      const entry = validItems.find(ei => ei.stockItemId === s.id)
+      if (!entry) return s
+      const qtyAdd = parseInt(entry.qty, 10)
+      const costN = parseFloat(entry.costPrice) || s.costPrice
+      newMovements.push({ id: Date.now() + s.id, stockItemId: s.id, qty: qtyAdd, type: 'in', date: TODAY, reason: 'purchase', invoiceNumber: nf || undefined })
+      return { ...s, qty: s.qty + qtyAdd, costPrice: costN, supplier: supplier || s.supplier }
+    }))
+    setStockMovements(prev => [...prev, ...newMovements])
+    setStockEntryOpen(false); setStockEntryItems([]); setStockEntryNF(''); setStockEntrySupplier('')
+    setSystemMessage(`Entrada registrada! ${validItems.length} produto(s) atualizados${nf ? ` · NF: ${nf}` : ''}`)
   }
 
   // ── Collaborator CRUD ──
@@ -1237,7 +1271,7 @@ export default function App() {
             {page === 'lab' && <LabPage orders={orders} patients={patients} prescriptions={prescriptions} stock={stock} sales={sales}
               onAdvanceOrder={advanceOrder} onNewOS={(rxId) => { setNewOsRxId(rxId); setNewOsOpen(true) }}
               onViewOrder={id => setOrderDetailId(id)} />}
-            {page === 'stock' && <StockPage stock={stock} suggestions={suggestions} movementCount={stockMovements.length} onEditStock={(id, qty) => { setStockEditId(id); setStockEditQty(String(qty)) }} onNewProduct={() => setNewProductOpen(true)} />}
+            {page === 'stock' && <StockPage stock={stock} stockMovements={stockMovements} suggestions={suggestions} onEditStock={(id, qty) => { setStockEditId(id); setStockEditQty(String(qty)) }} onNewProduct={() => setNewProductOpen(true)} onStockEntry={openStockEntry} />}
             {page === 'reports' && <ReportsPage patients={patients} prescriptions={prescriptions} orders={orders} sales={sales} stock={stock} />}
             {page === 'collaborators' && <CollaboratorsPage collaborators={collaborators} onNew={() => { setEditCollabId(null); setNewCollabForm({ name: '', role: 'vendedor', phone: '', email: '', commissionPct: '' }); setNewCollabOpen(true) }} onEdit={startEditCollaborator} onToggleActive={toggleCollaboratorActive} />}
           </div>
@@ -1740,49 +1774,125 @@ export default function App() {
         </div>
       </Modal>
 
-      {/* ── New product ── */}
-      <Modal open={newProductOpen} onClose={() => setNewProductOpen(false)} title="Novo produto no estoque" wide>
+      {/* ── New product (catalog only) ── */}
+      <Modal open={newProductOpen} onClose={() => setNewProductOpen(false)} title="Cadastrar novo produto" wide>
         <div className="space-y-3">
+          <p className="text-xs text-slate-400">Cadastre o produto no catálogo. Para dar entrada no estoque, use "Entrada NF" depois.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <FormField label="Nome do produto" value={newProductForm.name} onChange={v => setNewProductForm(p => ({ ...p, name: v }))} placeholder="Ex: Armação Ray-Ban Round" />
             <SelectField label="Categoria" value={newProductForm.category} onChange={v => setNewProductForm(p => ({ ...p, category: v }))}
-              options={[{ value: 'Armações', label: 'Armações' }, { value: 'Lentes', label: 'Lentes' }, { value: 'Lentes de contato', label: 'Lentes de contato' }, { value: 'Acessórios', label: 'Acessórios' }, { value: 'Solar', label: 'Solar' }, { value: 'Produtos de limpeza', label: 'Produtos de limpeza' }]} />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <FormField label="Quantidade" value={newProductForm.qty} onChange={v => setNewProductForm(p => ({ ...p, qty: v }))} placeholder="0" type="number" />
-            <FormField label="Estoque mínimo" value={newProductForm.min} onChange={v => setNewProductForm(p => ({ ...p, min: v }))} placeholder="3" type="number" />
-            <FormField label="Comissão %" value={newProductForm.commissionPct} onChange={v => setNewProductForm(p => ({ ...p, commissionPct: v }))} placeholder="5" type="number" />
+              options={[{ value: 'Armações', label: 'Armações' }, { value: 'Lentes', label: 'Lentes' }, { value: 'Lentes de contato', label: 'Lentes de contato' }, { value: 'Acessórios', label: 'Acessórios' }, { value: 'Solar', label: 'Solar' }, { value: 'Produtos de limpeza', label: 'Produtos de limpeza' }, { value: 'Tratamentos', label: 'Tratamentos' }]} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <FormField label="Preço de custo (R$)" value={newProductForm.costPrice} onChange={v => setNewProductForm(p => ({ ...p, costPrice: v }))} placeholder="0.00" type="number" />
             <FormField label="Preço de venda (R$)" value={newProductForm.salePrice} onChange={v => setNewProductForm(p => ({ ...p, salePrice: v }))} placeholder="0.00" type="number" />
           </div>
-          {/* Auto-calculated margin */}
           {(() => {
             const cost = parseFloat(newProductForm.costPrice) || 0
             const sale = parseFloat(newProductForm.salePrice) || 0
             if (cost > 0 && sale > 0) {
               const margin = ((sale - cost) / sale * 100)
-              const profit = sale - cost
               return (
-                <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${margin >= 0 ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'}`}>
+                <div className={`flex items-center gap-3 rounded-xl px-4 py-2.5 ${margin >= 0 ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'}`}>
                   <TrendingUp className={`h-4 w-4 ${margin >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} />
-                  <div>
-                    <p className={`text-sm font-semibold ${margin >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>Margem: {margin.toFixed(1)}%</p>
-                    <p className="text-xs text-slate-500">Lucro por unidade: R$ {profit.toFixed(2)}</p>
-                  </div>
+                  <p className={`text-sm font-semibold ${margin >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>Margem: {margin.toFixed(1)}% · Lucro: R$ {(sale - cost).toFixed(2)}</p>
                 </div>
               )
             }
             return null
           })()}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <FormField label="Estoque mínimo" value={newProductForm.min} onChange={v => setNewProductForm(p => ({ ...p, min: v }))} placeholder="3" type="number" />
+            <FormField label="Comissão %" value={newProductForm.commissionPct} onChange={v => setNewProductForm(p => ({ ...p, commissionPct: v }))} placeholder="5" type="number" />
             <FormField label="Fornecedor" value={newProductForm.supplier} onChange={v => setNewProductForm(p => ({ ...p, supplier: v }))} placeholder="Ex: Luxottica" />
-            <FormField label="Nº Nota Fiscal (NF)" value={newProductForm.invoiceNumber} onChange={v => setNewProductForm(p => ({ ...p, invoiceNumber: v }))} placeholder="Ex: NF-00123" />
           </div>
-          <button onClick={addNewProduct} disabled={!newProductForm.name.trim() || !newProductForm.qty || !newProductForm.salePrice}
+          <button onClick={addNewProduct} disabled={!newProductForm.name.trim() || !newProductForm.salePrice}
             className="mt-2 w-full rounded-xl bg-brand-500 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-40">
-            Adicionar ao estoque
+            Cadastrar produto
+          </button>
+        </div>
+      </Modal>
+
+      {/* ── Stock entry NF (batch purchase) ── */}
+      <Modal open={stockEntryOpen} onClose={() => { setStockEntryOpen(false); setStockEntryItems([]) }} title="Entrada de estoque (NF)" wide>
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FormField label="Nº Nota Fiscal" value={stockEntryNF} onChange={setStockEntryNF} placeholder="Ex: NF-00123" />
+            <FormField label="Fornecedor" value={stockEntrySupplier} onChange={setStockEntrySupplier} placeholder="Ex: Luxottica" />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Produtos da entrada</p>
+              <button onClick={addStockEntryItem}
+                className="flex items-center gap-1 rounded-lg bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition hover:bg-brand-100">
+                <Plus className="h-3 w-3" /> Adicionar produto
+              </button>
+            </div>
+
+            {stockEntryItems.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center">
+                <Boxes className="mx-auto h-8 w-8 text-slate-200 mb-2" />
+                <p className="text-sm text-slate-400">Nenhum produto adicionado</p>
+                <button onClick={addStockEntryItem} className="mt-2 text-xs font-semibold text-brand-500 hover:text-brand-700">+ Adicionar produto</button>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {stockEntryItems.map((ei, idx) => {
+                const selectedItem = stock.find(s => s.id === ei.stockItemId)
+                const costN = parseFloat(ei.costPrice) || 0
+                const salePrice = selectedItem?.price || 0
+                const margin = costN > 0 && salePrice > 0 ? ((salePrice - costN) / salePrice * 100) : 0
+                return (
+                  <div key={idx} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 grid gap-2 sm:grid-cols-3">
+                        <div className="sm:col-span-1">
+                          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Produto</label>
+                          <select value={ei.stockItemId} onChange={e => updateStockEntryItem(idx, 'stockItemId', parseInt(e.target.value, 10))}
+                            className="h-9 w-full rounded-xl border border-slate-200/80 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-brand-300 focus:ring-2 focus:ring-brand-100">
+                            <option value={0}>Selecione...</option>
+                            {stock.map(s => <option key={s.id} value={s.id}>{s.name} (estoque: {s.qty})</option>)}
+                          </select>
+                        </div>
+                        <FormField label="Quantidade" value={ei.qty} onChange={v => updateStockEntryItem(idx, 'qty', v)} placeholder="0" type="number" />
+                        <FormField label="Custo unitário (R$)" value={ei.costPrice} onChange={v => updateStockEntryItem(idx, 'costPrice', v)} placeholder={selectedItem?.costPrice?.toFixed(2) || '0.00'} type="number" />
+                      </div>
+                      <button onClick={() => removeStockEntryItem(idx)} className="mt-5 rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-500">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {selectedItem && costN > 0 && (
+                      <div className="mt-2 flex items-center gap-4 text-xs">
+                        <span className="text-slate-400">Venda: R$ {salePrice.toFixed(2)}</span>
+                        <span className={`font-semibold ${margin >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>Margem: {margin.toFixed(1)}%</span>
+                        {parseInt(ei.qty, 10) > 0 && <span className="text-slate-400">Subtotal custo: R$ {(costN * parseInt(ei.qty, 10)).toFixed(2)}</span>}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {stockEntryItems.filter(ei => ei.stockItemId > 0 && parseInt(ei.qty, 10) > 0).length > 0 && (
+            <div className="rounded-xl bg-brand-50 border border-brand-200 px-4 py-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-semibold text-brand-700">
+                  {stockEntryItems.filter(ei => ei.stockItemId > 0 && parseInt(ei.qty, 10) > 0).length} produto(s) ·{' '}
+                  {stockEntryItems.filter(ei => ei.stockItemId > 0 && parseInt(ei.qty, 10) > 0).reduce((s, ei) => s + (parseInt(ei.qty, 10) || 0), 0)} unidades
+                </span>
+                <span className="text-brand-600">
+                  Total custo: R$ {stockEntryItems.filter(ei => ei.stockItemId > 0).reduce((s, ei) => s + ((parseFloat(ei.costPrice) || 0) * (parseInt(ei.qty, 10) || 0)), 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <button onClick={submitStockEntry} disabled={stockEntryItems.filter(ei => ei.stockItemId > 0 && parseInt(ei.qty, 10) > 0).length === 0}
+            className="w-full rounded-xl bg-brand-500 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-40">
+            Confirmar entrada
           </button>
         </div>
       </Modal>
@@ -2477,8 +2587,8 @@ function LabPage({ orders, patients, prescriptions, stock, sales, onAdvanceOrder
 }
 
 /* ─── STOCK ─── */
-function StockPage({ stock, suggestions, movementCount, onEditStock, onNewProduct }: {
-  stock: StockItem[]; suggestions: Suggestion[]; movementCount: number; onEditStock: (id: number, qty: number) => void; onNewProduct: () => void
+function StockPage({ stock, stockMovements, suggestions, onEditStock, onNewProduct, onStockEntry }: {
+  stock: StockItem[]; stockMovements: StockMovement[]; suggestions: Suggestion[]; onEditStock: (id: number, qty: number) => void; onNewProduct: () => void; onStockEntry: (preSelectId?: number) => void
 }) {
   const [catFilter, setCatFilter] = useState('all')
   const [stockSearch, setStockSearch] = useState('')
@@ -2489,20 +2599,33 @@ function StockPage({ stock, suggestions, movementCount, onEditStock, onNewProduc
     return true
   })
 
+  // Find last NF per product from movements
+  const lastNFMap = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const m of stockMovements) {
+      if (m.invoiceNumber) map.set(m.stockItemId, m.invoiceNumber)
+    }
+    return map
+  }, [stockMovements])
+
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Estoque</h1>
-          <p className="mt-0.5 text-[13px] text-slate-400">{stock.length} produtos · {stock.reduce((s, i) => s + i.qty, 0)} unidades total · {movementCount} movimentação(ões)</p>
+          <p className="mt-0.5 text-[13px] text-slate-400">{stock.length} produtos · {stock.reduce((s, i) => s + i.qty, 0)} unidades total · {stockMovements.length} movimentação(ões)</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {stock.filter(s => s.qty <= s.min).length > 0 && (
             <Badge color="rose"><AlertTriangle className="h-3 w-3" />{stock.filter(s => s.qty <= s.min).length} abaixo do mínimo</Badge>
           )}
           <button onClick={onNewProduct}
-            className="flex items-center gap-1.5 rounded-xl bg-brand-500 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-brand-500/20 transition hover:bg-brand-600">
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-brand-300 hover:text-brand-600">
             <Plus className="h-3.5 w-3.5" /> Novo produto
+          </button>
+          <button onClick={() => onStockEntry()}
+            className="flex items-center gap-1.5 rounded-xl bg-brand-500 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-brand-500/20 transition hover:bg-brand-600">
+            <Boxes className="h-3.5 w-3.5" /> Entrada NF
           </button>
         </div>
       </div>
@@ -2526,6 +2649,7 @@ function StockPage({ stock, suggestions, movementCount, onEditStock, onNewProduc
           {filtered.map(s => {
             const critical = s.qty <= s.min
             const margin = s.costPrice > 0 ? ((s.price - s.costPrice) / s.price * 100) : 0
+            const lastNF = lastNFMap.get(s.id)
             return (
               <div key={s.id} className={`flex items-center justify-between rounded-xl px-3 py-3 transition ${critical ? 'bg-rose-50/60' : 'hover:bg-slate-50'}`}>
                 <div className="flex items-center gap-3 min-w-0">
@@ -2535,16 +2659,18 @@ function StockPage({ stock, suggestions, movementCount, onEditStock, onNewProduc
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-slate-800 truncate">{s.name}</p>
                     <p className="text-xs text-slate-400 truncate">{s.category} · Mín: {s.min} · Venda: R$ {s.price.toFixed(2)}{s.costPrice > 0 ? ` · Custo: R$ ${s.costPrice.toFixed(2)} · Margem: ${margin.toFixed(0)}%` : ''}</p>
-                    {s.supplier && <p className="text-[11px] text-slate-300 truncate">Fornecedor: {s.supplier}{s.invoiceNumber ? ` · NF: ${s.invoiceNumber}` : ''}</p>}
+                    {(s.supplier || lastNF) && <p className="text-[11px] text-slate-300 truncate">{s.supplier ? `Fornecedor: ${s.supplier}` : ''}{lastNF ? `${s.supplier ? ' · ' : ''}Última NF: ${lastNF}` : ''}</p>}
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right">
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="text-right mr-1">
                     <p className={`text-sm font-bold ${critical ? 'text-rose-600' : 'text-slate-800'}`}>{s.qty}</p>
                     <p className="text-[11px] text-slate-400">unidades</p>
                   </div>
+                  <button onClick={() => onStockEntry(s.id)}
+                    className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs font-medium text-emerald-600 transition hover:bg-emerald-100">Entrada</button>
                   <button onClick={() => onEditStock(s.id, s.qty)}
-                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:border-brand-300 hover:text-brand-600">Ajustar</button>
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:border-brand-300 hover:text-brand-600">Ajustar</button>
                 </div>
               </div>
             )
