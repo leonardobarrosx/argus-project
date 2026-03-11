@@ -680,6 +680,8 @@ export default function App() {
   const [newRxOD, setNewRxOD] = useState(emptyRx())
   const [newRxOE, setNewRxOE] = useState(emptyRx())
   const [newRxLensType, setNewRxLensType] = useState('')
+  const [newRxExamDate, setNewRxExamDate] = useState(TODAY)
+  const [newRxExpiresAt, setNewRxExpiresAt] = useState(fmtDate(addYears(TODAY_D, 1)))
   const [newOsOpen, setNewOsOpen] = useState(false)
   const [newOsRxId, setNewOsRxId] = useState<number | null>(null)
   const [newOsLensItemId, setNewOsLensItemId] = useState<string>('')
@@ -714,6 +716,8 @@ export default function App() {
   const [pdvAddRxOD, setPdvAddRxOD] = useState(emptyRx())
   const [pdvAddRxOE, setPdvAddRxOE] = useState(emptyRx())
   const [pdvAddRxLensType, setPdvAddRxLensType] = useState('')
+  const [pdvAddRxExamDate, setPdvAddRxExamDate] = useState(TODAY)
+  const [pdvAddRxExpiresAt, setPdvAddRxExpiresAt] = useState(fmtDate(addYears(TODAY_D, 1)))
   const [pdvGenerateOs, setPdvGenerateOs] = useState(true)
   const [pdvOsPaid, setPdvOsPaid] = useState(true)
 
@@ -799,10 +803,11 @@ export default function App() {
     if (!newRxPatientId) return
     const rx: Prescription = {
       id: Date.now(), patientId: newRxPatientId, rxOD: newRxOD, rxOE: newRxOE,
-      examDate: TODAY, expiresAt: fmtDate(addYears(TODAY_D, 1)), lensType: newRxLensType || 'Simples',
+      examDate: newRxExamDate, expiresAt: newRxExpiresAt, lensType: newRxLensType || 'Simples',
     }
     setPrescriptions(prev => [...prev, rx])
     setNewRxOD(emptyRx()); setNewRxOE(emptyRx()); setNewRxLensType('')
+    setNewRxExamDate(TODAY); setNewRxExpiresAt(fmtDate(addYears(TODAY_D, 1)))
     setNewRxOpen(false); setNewRxPatientId(null)
     setRxSaved(true); setTimeout(() => setRxSaved(false), 2000)
   }
@@ -933,11 +938,12 @@ export default function App() {
     if (!pdvGlassesBeneficiary) return
     const rx: Prescription = {
       id: Date.now(), patientId: pdvGlassesBeneficiary, rxOD: pdvAddRxOD, rxOE: pdvAddRxOE,
-      examDate: TODAY, expiresAt: fmtDate(addYears(TODAY_D, 1)), lensType: pdvAddRxLensType || 'Simples',
+      examDate: pdvAddRxExamDate, expiresAt: pdvAddRxExpiresAt, lensType: pdvAddRxLensType || 'Simples',
     }
     setPrescriptions(prev => [...prev, rx])
     setPdvGlassesRxId(rx.id)
     setPdvAddRxOD(emptyRx()); setPdvAddRxOE(emptyRx()); setPdvAddRxLensType('')
+    setPdvAddRxExamDate(TODAY); setPdvAddRxExpiresAt(fmtDate(addYears(TODAY_D, 1)))
     setPdvAddRxOpen(false)
     setSystemMessage('Prescrição salva!')
   }
@@ -1449,7 +1455,15 @@ export default function App() {
           <FormField label="Tipo de lente" value={newRxLensType} onChange={setNewRxLensType} placeholder="Ex: Multifocal, Blue Light…" />
           <RxInputRow label="Olho direito (OD)" rx={newRxOD} onChange={setNewRxOD} />
           <RxInputRow label="Olho esquerdo (OE)" rx={newRxOE} onChange={setNewRxOE} />
-          <p className="text-xs text-slate-400">Exame: {TODAY} · Validade: {fmtDate(addYears(TODAY_D, 1))}</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <FormField label="Data do exame" value={newRxExamDate} onChange={v => {
+              setNewRxExamDate(v)
+              const parsed = parseDMY(v)
+              if (parsed) setNewRxExpiresAt(fmtDate(addYears(parsed, 1)))
+            }} placeholder="dd/mm/aaaa" />
+            <FormField label="Validade da receita" value={newRxExpiresAt} onChange={setNewRxExpiresAt} placeholder="dd/mm/aaaa" />
+          </div>
+          <p className="text-[11px] text-slate-400">A validade é recalculada automaticamente ao alterar a data do exame (padrão: 1 ano). Você pode ajustar manualmente.</p>
           <button onClick={saveNewPrescription} disabled={!newRxPatientId}
             className="mt-2 w-full rounded-xl bg-brand-500 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-40">
             {rxSaved ? <><Check className="mr-2 inline h-4 w-4" /> Salvo!</> : 'Salvar prescrição'}
@@ -1880,7 +1894,15 @@ export default function App() {
           <FormField label="Tipo de lente" value={pdvAddRxLensType} onChange={setPdvAddRxLensType} placeholder="Ex: Multifocal, Blue Light…" />
           <RxInputRow label="Olho direito (OD)" rx={pdvAddRxOD} onChange={setPdvAddRxOD} />
           <RxInputRow label="Olho esquerdo (OE)" rx={pdvAddRxOE} onChange={setPdvAddRxOE} />
-          <p className="text-xs text-slate-400">Exame: {TODAY} · Validade: {fmtDate(addYears(TODAY_D, 1))}</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <FormField label="Data do exame" value={pdvAddRxExamDate} onChange={v => {
+              setPdvAddRxExamDate(v)
+              const parsed = parseDMY(v)
+              if (parsed) setPdvAddRxExpiresAt(fmtDate(addYears(parsed, 1)))
+            }} placeholder="dd/mm/aaaa" />
+            <FormField label="Validade da receita" value={pdvAddRxExpiresAt} onChange={setPdvAddRxExpiresAt} placeholder="dd/mm/aaaa" />
+          </div>
+          <p className="text-[11px] text-slate-400">A validade é recalculada automaticamente ao alterar a data do exame (padrão: 1 ano). Você pode ajustar manualmente.</p>
           <button onClick={savePdvPrescription} disabled={!pdvGlassesBeneficiary}
             className="mt-2 w-full rounded-xl bg-brand-500 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-40">
             Salvar prescrição e continuar
