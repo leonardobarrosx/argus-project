@@ -3018,11 +3018,12 @@ function CollaboratorsPage({ collaborators, onNew, onEdit, onToggleActive }: {
 }
 
 /* ================================================================== */
-/*  MOBILE NAV (horizontal scroll swipe)                               */
+/*  MOBILE NAV (drag-to-scroll + tap-to-select)                        */
 /* ================================================================== */
 
 function MobileNav({ page, onChangePage }: { page: PageKey; onChangePage: (p: PageKey) => void }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const dragState = useRef({ isDown: false, startX: 0, scrollLeft: 0, dragged: false })
 
   // Auto-scroll to active item when page changes
   useEffect(() => {
@@ -3035,12 +3036,42 @@ function MobileNav({ page, onChangePage }: { page: PageKey; onChangePage: (p: Pa
     }
   }, [page])
 
+  const onPointerDown = (e: React.PointerEvent) => {
+    const el = scrollRef.current
+    if (!el) return
+    dragState.current = { isDown: true, startX: e.clientX, scrollLeft: el.scrollLeft, dragged: false }
+    el.setPointerCapture(e.pointerId)
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!dragState.current.isDown) return
+    const dx = e.clientX - dragState.current.startX
+    if (Math.abs(dx) > 5) dragState.current.dragged = true
+    const el = scrollRef.current
+    if (el) el.scrollLeft = dragState.current.scrollLeft - dx
+  }
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    const el = scrollRef.current
+    if (el) el.releasePointerCapture(e.pointerId)
+    dragState.current.isDown = false
+  }
+
+  const handleItemClick = (key: PageKey) => {
+    if (dragState.current.dragged) return // was a drag, not a tap
+    onChangePage(key)
+  }
+
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/50 bg-white/95 backdrop-blur-md lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div
         ref={scrollRef}
-        className="flex items-center gap-1 overflow-x-auto px-2 py-2 scrollbar-hide"
-        style={{ WebkitOverflowScrolling: 'touch', scrollSnapType: 'x proximity', msOverflowStyle: 'none', scrollbarWidth: 'none' }}
+        className="flex items-center gap-1 overflow-x-auto px-2 py-2 scrollbar-hide select-none"
+        style={{ WebkitOverflowScrolling: 'touch', scrollSnapType: 'x proximity', msOverflowStyle: 'none', scrollbarWidth: 'none', cursor: dragState.current.isDown ? 'grabbing' : 'grab' }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
       >
         {NAV.map(item => {
           const Icon = item.icon
@@ -3049,9 +3080,9 @@ function MobileNav({ page, onChangePage }: { page: PageKey; onChangePage: (p: Pa
             <button
               key={item.key}
               data-active={active}
-              onClick={() => onChangePage(item.key)}
-              className={`flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl py-2 text-[10px] font-semibold transition ${active ? 'bg-brand-50 text-brand-600' : 'text-slate-400 active:bg-slate-50'}`}
-              style={{ scrollSnapAlign: 'center', minWidth: 'calc(25vw - 8px)' }}
+              onClick={() => handleItemClick(item.key)}
+              className={`flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl py-2 text-[10px] font-semibold transition ${active ? 'bg-brand-50 text-brand-600' : 'text-slate-400'}`}
+              style={{ scrollSnapAlign: 'center', minWidth: 'calc(25vw - 8px)', touchAction: 'pan-y' }}
             >
               <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.7} />
               <span className="whitespace-nowrap">{item.label}</span>
