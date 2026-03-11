@@ -117,10 +117,15 @@ interface StockMovement {
   qty: number
   type: 'in' | 'out'
   date: string
-  reason: 'service_order' | 'sale' | 'manual_adjustment' | 'purchase'
+  reason: 'service_order' | 'sale' | 'manual_adjustment' | 'purchase' | 'physical_count'
+  performedBy: string
+  notes?: string
+  timestamp?: string        // HH:mm
   orderId?: string
   prescriptionId?: number
   invoiceNumber?: string
+  previousQty?: number
+  newQty?: number
 }
 
 interface Collaborator {
@@ -682,6 +687,9 @@ export default function App() {
   const [newOsQty, setNewOsQty] = useState<string>('2')
   const [stockEditId, setStockEditId] = useState<number | null>(null)
   const [stockEditQty, setStockEditQty] = useState('')
+  const [stockEditReason, setStockEditReason] = useState('')
+  const [stockEditType, setStockEditType] = useState<'adjust' | 'count'>('adjust')
+  const [stockLogItemId, setStockLogItemId] = useState<number | null>(null)
   const [saleLinkedOrderId, setSaleLinkedOrderId] = useState<string | null>(null)
   const [salePatientId, setSalePatientId] = useState<number | null>(null)
   const [campaignOpen, setCampaignOpen] = useState(false)
@@ -839,8 +847,8 @@ export default function App() {
     setOrders(prev => [...prev, os])
     setStockMovements(prev => [
       ...prev,
-      { id: Date.now(), stockItemId: lensId, qty: qtyNeeded, type: 'out', date: TODAY, reason: 'service_order', orderId: os.id, prescriptionId: rx.id },
-      { id: Date.now() + 1, stockItemId: frameId, qty: 1, type: 'out', date: TODAY, reason: 'service_order', orderId: os.id, prescriptionId: rx.id },
+      { id: Date.now(), stockItemId: lensId, qty: qtyNeeded, type: 'out', date: TODAY, timestamp: NOW_TIME, reason: 'service_order', performedBy: 'Dra. Eliza Silva', notes: `OS ${os.id}`, orderId: os.id, prescriptionId: rx.id },
+      { id: Date.now() + 1, stockItemId: frameId, qty: 1, type: 'out', date: TODAY, timestamp: NOW_TIME, reason: 'service_order', performedBy: 'Dra. Eliza Silva', notes: `OS ${os.id}`, orderId: os.id, prescriptionId: rx.id },
     ])
     setNewOsOpen(false); setNewOsRxId(null); setNewOsLensItemId(''); setNewOsFrameItemId(''); setNewOsQty('2')
   }
@@ -1004,7 +1012,10 @@ export default function App() {
       qty: c.qty,
       type: 'out' as const,
       date: TODAY,
+      timestamp: NOW_TIME,
       reason: 'sale' as const,
+      performedBy: 'Dra. Eliza Silva',
+      notes: `Venda PDV`,
     }))
 
     const saleId = Date.now()
@@ -1037,7 +1048,10 @@ export default function App() {
           qty: 1,
           type: 'out' as const,
           date: TODAY,
+          timestamp: NOW_TIME,
           reason: 'service_order' as const,
+          performedBy: 'Dra. Eliza Silva',
+          notes: `OS ${osId}`,
           orderId: osId,
           prescriptionId: g.prescriptionId ?? undefined,
         })
@@ -1051,7 +1065,10 @@ export default function App() {
           qty: 1,
           type: 'out' as const,
           date: TODAY,
+          timestamp: NOW_TIME,
           reason: 'sale' as const,
+          performedBy: 'Dra. Eliza Silva',
+          notes: 'Venda PDV (óculos)',
         })
       }
     }
@@ -1073,14 +1090,18 @@ export default function App() {
     return true
   }
 
-  // ── Stock adjust ──
+  const NOW_TIME = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+  // ── Stock adjust / physical count ──
   const adjustStock = () => {
     if (stockEditId === null) return
     const newQty = parseInt(stockEditQty, 10)
     if (isNaN(newQty) || newQty < 0) return
+    if (!stockEditReason.trim() && stockEditType === 'adjust') return
     const current = stock.find((s) => s.id === stockEditId)
+    if (!current) return
     setStock(prev => prev.map(s => s.id === stockEditId ? { ...s, qty: newQty } : s))
-    if (current && current.qty !== newQty) {
+    if (current.qty !== newQty) {
       const delta = newQty - current.qty
       setStockMovements((prev) => [
         ...prev,
@@ -1090,11 +1111,18 @@ export default function App() {
           qty: Math.abs(delta),
           type: delta >= 0 ? 'in' : 'out',
           date: TODAY,
-          reason: 'manual_adjustment',
+          timestamp: NOW_TIME,
+          reason: stockEditType === 'count' ? 'physical_count' : 'manual_adjustment',
+          performedBy: 'Dra. Eliza Silva',
+          notes: stockEditType === 'count'
+            ? `Contagem física: ${current.qty} → ${newQty}${stockEditReason.trim() ? ' · ' + stockEditReason.trim() : ''}`
+            : stockEditReason.trim(),
+          previousQty: current.qty,
+          newQty: newQty,
         },
       ])
     }
-    setStockEditId(null); setStockEditQty('')
+    setStockEditId(null); setStockEditQty(''); setStockEditReason(''); setStockEditType('adjust')
   }
 
   // ── Add new product to catalog ──
@@ -1136,7 +1164,7 @@ export default function App() {
       if (!entry) return s
       const qtyAdd = parseInt(entry.qty, 10)
       const costN = parseFloat(entry.costPrice) || s.costPrice
-      newMovements.push({ id: Date.now() + s.id, stockItemId: s.id, qty: qtyAdd, type: 'in', date: TODAY, reason: 'purchase', invoiceNumber: nf || undefined })
+      newMovements.push({ id: Date.now() + s.id, stockItemId: s.id, qty: qtyAdd, type: 'in', date: TODAY, timestamp: NOW_TIME, reason: 'purchase', performedBy: 'Dra. Eliza Silva', notes: `Entrada NF${nf ? ': ' + nf : ''}${supplier ? ' · ' + supplier : ''}`, invoiceNumber: nf || undefined, previousQty: s.qty, newQty: s.qty + qtyAdd })
       return { ...s, qty: s.qty + qtyAdd, costPrice: costN, supplier: supplier || s.supplier }
     }))
     setStockMovements(prev => [...prev, ...newMovements])
@@ -1271,7 +1299,11 @@ export default function App() {
             {page === 'lab' && <LabPage orders={orders} patients={patients} prescriptions={prescriptions} stock={stock} sales={sales}
               onAdvanceOrder={advanceOrder} onNewOS={(rxId) => { setNewOsRxId(rxId); setNewOsOpen(true) }}
               onViewOrder={id => setOrderDetailId(id)} />}
-            {page === 'stock' && <StockPage stock={stock} stockMovements={stockMovements} suggestions={suggestions} onEditStock={(id, qty) => { setStockEditId(id); setStockEditQty(String(qty)) }} onNewProduct={() => setNewProductOpen(true)} onStockEntry={openStockEntry} />}
+            {page === 'stock' && <StockPage stock={stock} stockMovements={stockMovements} suggestions={suggestions}
+              onAdjustStock={(id, qty) => { setStockEditId(id); setStockEditQty(String(qty)); setStockEditReason(''); setStockEditType('adjust') }}
+              onPhysicalCount={(id, qty) => { setStockEditId(id); setStockEditQty(String(qty)); setStockEditReason(''); setStockEditType('count') }}
+              onNewProduct={() => setNewProductOpen(true)} onStockEntry={openStockEntry}
+              onViewLog={id => setStockLogItemId(id)} />}
             {page === 'reports' && <ReportsPage patients={patients} prescriptions={prescriptions} orders={orders} sales={sales} stock={stock} />}
             {page === 'collaborators' && <CollaboratorsPage collaborators={collaborators} onNew={() => { setEditCollabId(null); setNewCollabForm({ name: '', role: 'vendedor', phone: '', email: '', commissionPct: '' }); setNewCollabOpen(true) }} onEdit={startEditCollaborator} onToggleActive={toggleCollaboratorActive} />}
           </div>
@@ -1538,13 +1570,144 @@ export default function App() {
         })()}
       </Modal>
 
-      {/* Stock adjust */}
-      <Modal open={stockEditId !== null} onClose={() => setStockEditId(null)} title="Ajustar estoque">
-        <div className="space-y-3">
-          <p className="text-sm text-slate-500">Produto: <strong className="text-slate-800">{stock.find(s => s.id === stockEditId)?.name}</strong></p>
-          <FormField label="Nova quantidade" value={stockEditQty} onChange={setStockEditQty} placeholder="0" type="number" />
-          <button onClick={adjustStock} className="mt-2 w-full rounded-xl bg-brand-500 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600">Salvar</button>
-        </div>
+      {/* Stock adjust / physical count */}
+      <Modal open={stockEditId !== null} onClose={() => { setStockEditId(null); setStockEditReason(''); setStockEditType('adjust') }}
+        title={stockEditType === 'count' ? 'Contagem física' : 'Ajuste manual de estoque'}>
+        {stockEditId !== null && (() => {
+          const item = stock.find(s => s.id === stockEditId)
+          if (!item) return null
+          const newQ = parseInt(stockEditQty, 10)
+          const delta = !isNaN(newQ) ? newQ - item.qty : 0
+          return (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500">Produto: <strong className="text-slate-800">{item.name}</strong></p>
+              <div className="flex items-center gap-3 rounded-xl bg-slate-50 border border-slate-100 px-4 py-2.5">
+                <div className="text-center">
+                  <p className="text-[11px] font-semibold uppercase text-slate-400">Atual</p>
+                  <p className="text-lg font-bold text-slate-800">{item.qty}</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-slate-300" />
+                <div className="text-center">
+                  <p className="text-[11px] font-semibold uppercase text-slate-400">{stockEditType === 'count' ? 'Contado' : 'Novo'}</p>
+                  <p className={`text-lg font-bold ${!isNaN(newQ) && delta !== 0 ? (delta > 0 ? 'text-emerald-600' : 'text-rose-600') : 'text-slate-800'}`}>{stockEditQty || '—'}</p>
+                </div>
+                {!isNaN(newQ) && delta !== 0 && (
+                  <div className={`ml-auto rounded-lg px-2.5 py-1 text-xs font-bold ${delta > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                    {delta > 0 ? '+' : ''}{delta}
+                  </div>
+                )}
+              </div>
+              <FormField label={stockEditType === 'count' ? 'Quantidade contada' : 'Nova quantidade'} value={stockEditQty} onChange={setStockEditQty} placeholder="0" type="number" />
+              <FormField label={stockEditType === 'count' ? 'Observações (opcional)' : 'Motivo do ajuste (obrigatório)'} value={stockEditReason} onChange={setStockEditReason} placeholder={stockEditType === 'count' ? 'Ex: Contagem de inventário mensal' : 'Ex: Quebra, devolução, erro de contagem'} />
+              {stockEditType === 'adjust' && (
+                <p className="text-[11px] text-amber-600 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Ajustes manuais geram divergência com o saldo fiscal. Justifique.</p>
+              )}
+              <button onClick={adjustStock}
+                disabled={stockEditQty === '' || (stockEditType === 'adjust' && !stockEditReason.trim())}
+                className="mt-2 w-full rounded-xl bg-brand-500 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-40">
+                {stockEditType === 'count' ? 'Registrar contagem' : 'Confirmar ajuste'}
+              </button>
+              <p className="text-[10px] text-slate-300 text-center">Registrado como: Dra. Eliza Silva · {TODAY}</p>
+            </div>
+          )
+        })()}
+      </Modal>
+
+      {/* Movement log per product */}
+      <Modal open={stockLogItemId !== null} onClose={() => setStockLogItemId(null)} title="Histórico de movimentações" wide>
+        {stockLogItemId !== null && (() => {
+          const item = stock.find(s => s.id === stockLogItemId)
+          if (!item) return <p className="text-sm text-slate-400">Produto não encontrado</p>
+          const movements = stockMovements.filter(m => m.stockItemId === stockLogItemId).sort((a, b) => b.id - a.id)
+          const fiscalIn = movements.filter(m => m.type === 'in' && m.invoiceNumber).reduce((s, m) => s + m.qty, 0)
+          const fiscalOut = movements.filter(m => m.type === 'out' && (m.reason === 'sale' || m.reason === 'service_order')).reduce((s, m) => s + m.qty, 0)
+          const fiscalBalance = fiscalIn - fiscalOut
+          const gerencialIn = movements.filter(m => m.type === 'in').reduce((s, m) => s + m.qty, 0)
+          const gerencialOut = movements.filter(m => m.type === 'out').reduce((s, m) => s + m.qty, 0)
+          const gerencialBalance = gerencialIn - gerencialOut
+          const physicalBalance = item.qty
+          const hasDiscrepancy = fiscalBalance !== physicalBalance || gerencialBalance !== physicalBalance
+
+          const REASON_LABELS: Record<string, string> = {
+            purchase: 'Compra (NF)', sale: 'Venda', service_order: 'Ordem de Serviço',
+            manual_adjustment: 'Ajuste Manual', physical_count: 'Contagem Física',
+          }
+
+          return (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                <p className="text-xs text-slate-400">{item.category} · Fornecedor: {item.supplier || '—'}</p>
+              </div>
+
+              {/* Three balance cards */}
+              <div className="grid gap-2 sm:grid-cols-3">
+                <div className={`rounded-xl border px-3 py-2.5 ${fiscalBalance === physicalBalance ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/50'}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Saldo Fiscal</p>
+                  <p className="text-xl font-bold text-slate-800">{fiscalBalance}</p>
+                  <p className="text-[10px] text-slate-400">Entradas c/ NF − Saídas</p>
+                </div>
+                <div className={`rounded-xl border px-3 py-2.5 ${gerencialBalance === physicalBalance ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/50'}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Saldo Gerencial</p>
+                  <p className="text-xl font-bold text-slate-800">{gerencialBalance}</p>
+                  <p className="text-[10px] text-slate-400">Todas movimentações</p>
+                </div>
+                <div className="rounded-xl border border-brand-200 bg-brand-50/50 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Saldo Físico</p>
+                  <p className="text-xl font-bold text-brand-700">{physicalBalance}</p>
+                  <p className="text-[10px] text-slate-400">Estoque atual</p>
+                </div>
+              </div>
+
+              {hasDiscrepancy && (
+                <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-700">Divergência detectada</p>
+                    <p className="text-xs text-amber-600">
+                      {fiscalBalance !== physicalBalance && `Fiscal (${fiscalBalance}) ≠ Físico (${physicalBalance}). `}
+                      {gerencialBalance !== physicalBalance && `Gerencial (${gerencialBalance}) ≠ Físico (${physicalBalance}). `}
+                      Realize uma contagem física ou ajuste manual para regularizar.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Movement list */}
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{movements.length} movimentação(ões)</p>
+                <div className="max-h-[320px] space-y-1 overflow-y-auto pr-1">
+                  {movements.length === 0 && <p className="py-6 text-center text-sm text-slate-300">Nenhuma movimentação registrada</p>}
+                  {movements.map(m => (
+                    <div key={m.id} className={`rounded-xl px-3 py-2.5 border ${m.type === 'in' ? 'border-emerald-100 bg-emerald-50/30' : 'border-rose-100 bg-rose-50/30'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`flex h-6 w-6 items-center justify-center rounded-lg ${m.type === 'in' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                            {m.type === 'in' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800">
+                              {m.type === 'in' ? '+' : '−'}{m.qty} un · {REASON_LABELS[m.reason] || m.reason}
+                            </p>
+                            <p className="text-[11px] text-slate-400">
+                              {m.date}{m.timestamp ? ` ${m.timestamp}` : ''} · por <strong>{m.performedBy || 'Sistema'}</strong>
+                              {m.invoiceNumber ? ` · NF: ${m.invoiceNumber}` : ''}
+                              {m.orderId ? ` · ${m.orderId}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        {m.previousQty !== undefined && m.newQty !== undefined && (
+                          <span className="text-[11px] text-slate-400 shrink-0">{m.previousQty} → {m.newQty}</span>
+                        )}
+                      </div>
+                      {m.notes && <p className="mt-1 text-xs text-slate-500 italic pl-8">{m.notes}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </Modal>
 
       {/* ── PDV: New client inline ── */}
@@ -2587,8 +2750,8 @@ function LabPage({ orders, patients, prescriptions, stock, sales, onAdvanceOrder
 }
 
 /* ─── STOCK ─── */
-function StockPage({ stock, stockMovements, suggestions, onEditStock, onNewProduct, onStockEntry }: {
-  stock: StockItem[]; stockMovements: StockMovement[]; suggestions: Suggestion[]; onEditStock: (id: number, qty: number) => void; onNewProduct: () => void; onStockEntry: (preSelectId?: number) => void
+function StockPage({ stock, stockMovements, suggestions, onAdjustStock, onPhysicalCount, onNewProduct, onStockEntry, onViewLog }: {
+  stock: StockItem[]; stockMovements: StockMovement[]; suggestions: Suggestion[]; onAdjustStock: (id: number, qty: number) => void; onPhysicalCount: (id: number, qty: number) => void; onNewProduct: () => void; onStockEntry: (preSelectId?: number) => void; onViewLog: (id: number) => void
 }) {
   const [catFilter, setCatFilter] = useState('all')
   const [stockSearch, setStockSearch] = useState('')
@@ -2599,11 +2762,21 @@ function StockPage({ stock, stockMovements, suggestions, onEditStock, onNewProdu
     return true
   })
 
-  // Find last NF per product from movements
+  // Find last NF per product and compute fiscal balance from movements
   const lastNFMap = useMemo(() => {
     const map = new Map<number, string>()
     for (const m of stockMovements) {
       if (m.invoiceNumber) map.set(m.stockItemId, m.invoiceNumber)
+    }
+    return map
+  }, [stockMovements])
+
+  const fiscalBalances = useMemo(() => {
+    const map = new Map<number, number>()
+    for (const m of stockMovements) {
+      const prev = map.get(m.stockItemId) || 0
+      if (m.type === 'in' && m.invoiceNumber) map.set(m.stockItemId, prev + m.qty)
+      else if (m.type === 'out' && (m.reason === 'sale' || m.reason === 'service_order')) map.set(m.stockItemId, prev - m.qty)
     }
     return map
   }, [stockMovements])
@@ -2650,26 +2823,39 @@ function StockPage({ stock, stockMovements, suggestions, onEditStock, onNewProdu
             const critical = s.qty <= s.min
             const margin = s.costPrice > 0 ? ((s.price - s.costPrice) / s.price * 100) : 0
             const lastNF = lastNFMap.get(s.id)
+            const fiscal = fiscalBalances.get(s.id) || 0
+            const hasDivergence = fiscal !== s.qty && fiscal > 0
             return (
-              <div key={s.id} className={`flex items-center justify-between rounded-xl px-3 py-3 transition ${critical ? 'bg-rose-50/60' : 'hover:bg-slate-50'}`}>
+              <div key={s.id} className={`flex items-center justify-between rounded-xl px-3 py-3 transition ${critical ? 'bg-rose-50/60' : hasDivergence ? 'bg-amber-50/40' : 'hover:bg-slate-50'}`}>
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${critical ? 'bg-rose-100 text-rose-500' : 'bg-brand-50 text-brand-500'}`}>
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${critical ? 'bg-rose-100 text-rose-500' : hasDivergence ? 'bg-amber-100 text-amber-500' : 'bg-brand-50 text-brand-500'}`}>
                     <Package className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-slate-800 truncate">{s.name}</p>
                     <p className="text-xs text-slate-400 truncate">{s.category} · Mín: {s.min} · Venda: R$ {s.price.toFixed(2)}{s.costPrice > 0 ? ` · Custo: R$ ${s.costPrice.toFixed(2)} · Margem: ${margin.toFixed(0)}%` : ''}</p>
-                    {(s.supplier || lastNF) && <p className="text-[11px] text-slate-300 truncate">{s.supplier ? `Fornecedor: ${s.supplier}` : ''}{lastNF ? `${s.supplier ? ' · ' : ''}Última NF: ${lastNF}` : ''}</p>}
+                    <div className="flex items-center gap-2">
+                      {(s.supplier || lastNF) && <p className="text-[11px] text-slate-300 truncate">{s.supplier ? `Fornecedor: ${s.supplier}` : ''}{lastNF ? `${s.supplier ? ' · ' : ''}Última NF: ${lastNF}` : ''}</p>}
+                      {hasDivergence && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600">
+                          <AlertTriangle className="h-2.5 w-2.5" /> Fiscal: {fiscal}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <div className="text-right mr-1">
                     <p className={`text-sm font-bold ${critical ? 'text-rose-600' : 'text-slate-800'}`}>{s.qty}</p>
                     <p className="text-[11px] text-slate-400">unidades</p>
                   </div>
+                  <button onClick={() => onViewLog(s.id)} title="Histórico"
+                    className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-400 transition hover:border-brand-300 hover:text-brand-600"><FileText className="h-3.5 w-3.5" /></button>
                   <button onClick={() => onStockEntry(s.id)}
                     className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs font-medium text-emerald-600 transition hover:bg-emerald-100">Entrada</button>
-                  <button onClick={() => onEditStock(s.id, s.qty)}
+                  <button onClick={() => onPhysicalCount(s.id, s.qty)}
+                    className="rounded-lg border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs font-medium text-sky-600 transition hover:bg-sky-100">Contagem</button>
+                  <button onClick={() => onAdjustStock(s.id, s.qty)}
                     className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:border-brand-300 hover:text-brand-600">Ajustar</button>
                 </div>
               </div>
