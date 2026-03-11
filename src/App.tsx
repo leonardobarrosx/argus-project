@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   AlertTriangle, BarChart3, Bell, Boxes, CalendarDays, Check, CheckCircle2,
-  ChevronDown, ChevronLeft, ChevronRight, ClipboardPlus, CreditCard,
+  ChevronDown, ChevronRight, ClipboardPlus, CreditCard,
   Download, FileText, Filter, FlaskConical, Gift, LayoutDashboard, MessageCircle,
   Microscope, Package, Plus, Search, Send, ShoppingCart,
   Sparkles, Stethoscope, TrendingDown, TrendingUp, UserPlus,
@@ -3018,70 +3018,47 @@ function CollaboratorsPage({ collaborators, onNew, onEdit, onToggleActive }: {
 }
 
 /* ================================================================== */
-/*  MOBILE NAV (paginated RPG-style toolbar)                           */
+/*  MOBILE NAV (horizontal scroll swipe)                               */
 /* ================================================================== */
 
 function MobileNav({ page, onChangePage }: { page: PageKey; onChangePage: (p: PageKey) => void }) {
-  const [toolbarPage, setToolbarPage] = useState(0)
-  const perPage = 4
-  const totalPages = Math.ceil(NAV.length / perPage)
-  const visibleItems = NAV.slice(toolbarPage * perPage, toolbarPage * perPage + perPage)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Auto-switch toolbar page when active page is on another toolbar page
+  // Auto-scroll to active item when page changes
   useEffect(() => {
-    const idx = NAV.findIndex(n => n.key === page)
-    const targetPage = Math.floor(idx / perPage)
-    if (targetPage !== toolbarPage) setToolbarPage(targetPage)
-  }, [page, toolbarPage])
+    const container = scrollRef.current
+    if (!container) return
+    const activeBtn = container.querySelector('[data-active="true"]') as HTMLElement | null
+    if (activeBtn) {
+      const left = activeBtn.offsetLeft - container.offsetWidth / 2 + activeBtn.offsetWidth / 2
+      container.scrollTo({ left, behavior: 'smooth' })
+    }
+  }, [page])
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/50 bg-white/95 backdrop-blur-md safe-b lg:hidden">
-      <div className="flex items-center">
-        {/* Left arrow */}
-        <button
-          onClick={() => setToolbarPage(p => Math.max(0, p - 1))}
-          disabled={toolbarPage === 0}
-          className="flex h-full w-9 shrink-0 items-center justify-center text-slate-300 transition disabled:opacity-0"
-          aria-label="Página anterior"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-
-        {/* Nav items */}
-        <div className="flex flex-1 items-center justify-around py-2">
-          {visibleItems.map(item => {
-            const Icon = item.icon
-            const active = page === item.key
-            return (
-              <button key={item.key} onClick={() => onChangePage(item.key)}
-                className={`flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] font-semibold transition ${active ? 'text-brand-500' : 'text-slate-400'}`}>
-                <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.7} />
-                <span className="max-w-[56px] truncate">{item.label}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Right arrow */}
-        <button
-          onClick={() => setToolbarPage(p => Math.min(totalPages - 1, p + 1))}
-          disabled={toolbarPage >= totalPages - 1}
-          className="flex h-full w-9 shrink-0 items-center justify-center text-slate-300 transition disabled:opacity-0"
-          aria-label="Próxima página"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/50 bg-white/95 backdrop-blur-md lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      <div
+        ref={scrollRef}
+        className="flex items-center gap-1 overflow-x-auto px-2 py-2 scrollbar-hide"
+        style={{ WebkitOverflowScrolling: 'touch', scrollSnapType: 'x proximity', msOverflowStyle: 'none', scrollbarWidth: 'none' }}
+      >
+        {NAV.map(item => {
+          const Icon = item.icon
+          const active = page === item.key
+          return (
+            <button
+              key={item.key}
+              data-active={active}
+              onClick={() => onChangePage(item.key)}
+              className={`flex shrink-0 flex-col items-center gap-0.5 rounded-xl px-3.5 py-1.5 text-[10px] font-semibold transition ${active ? 'bg-brand-50 text-brand-600' : 'text-slate-400 active:bg-slate-50'}`}
+              style={{ scrollSnapAlign: 'center' }}
+            >
+              <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.7} />
+              <span className="whitespace-nowrap">{item.label}</span>
+            </button>
+          )
+        })}
       </div>
-
-      {/* Page dots */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-1.5 pb-1.5">
-          {Array.from({ length: totalPages }, (_, i) => (
-            <button key={i} onClick={() => setToolbarPage(i)}
-              className={`h-1 rounded-full transition-all duration-200 ${i === toolbarPage ? 'w-4 bg-brand-500' : 'w-1.5 bg-slate-200'}`} />
-          ))}
-        </div>
-      )}
     </nav>
   )
 }
