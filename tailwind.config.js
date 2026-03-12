@@ -37,10 +37,15 @@ export default {
           '0%': { opacity: '0', transform: 'translateY(-4px) scale(0.98)' },
           '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
         },
+        slideUp: {
+          '0%': { opacity: '0', transform: 'translateY(100%)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         rise: 'rise 400ms ease-out both',
         fadeIn: 'fadeIn 200ms ease-out both',
+        slideUp: 'slideUp 250ms ease-out both',
       },
     },
   },

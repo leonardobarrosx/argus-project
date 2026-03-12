@@ -5,7 +5,7 @@ import {
   Download, FileText, Filter, FlaskConical, Gift, LayoutDashboard, MessageCircle,
   Microscope, Package, Plus, Search, Send, ShoppingCart,
   Sparkles, Stethoscope, TrendingDown, TrendingUp, UserPlus,
-  UserRound, Users, X, History, Phone, Glasses, Trash2, Briefcase, Mail, Edit2,
+  UserRound, Users, X, History, Phone, Glasses, Trash2, Briefcase, Mail, Edit2, Menu,
 } from 'lucide-react'
 
 /* ================================================================== */
@@ -3018,112 +3018,92 @@ function CollaboratorsPage({ collaborators, onNew, onEdit, onToggleActive }: {
 }
 
 /* ================================================================== */
-/*  MOBILE NAV (native touch scroll + mouse drag)                      */
+/*  MOBILE NAV (bottom bar + drawer)                                   */
 /* ================================================================== */
 
+const BOTTOM_BAR_KEYS: PageKey[] = ['overview', 'pdv', 'patients', 'lab']
+
 function MobileNav({ page, onChangePage }: { page: PageKey; onChangePage: (p: PageKey) => void }) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const wasDragging = useRef(false)
-  const touchStartX = useRef(0)
-
-  // Auto-scroll to active item when page changes
-  useEffect(() => {
-    const container = scrollRef.current
-    if (!container) return
-    const activeBtn = container.querySelector('[data-active="true"]') as HTMLElement | null
-    if (activeBtn) {
-      const left = activeBtn.offsetLeft - container.offsetWidth / 2 + activeBtn.offsetWidth / 2
-      container.scrollTo({ left, behavior: 'smooth' })
-    }
-  }, [page])
-
-  // Track touch movement to distinguish tap vs swipe
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-
-    const onTouchStart = (e: TouchEvent) => {
-      touchStartX.current = e.touches[0].clientX
-      wasDragging.current = false
-    }
-    const onTouchMove = (e: TouchEvent) => {
-      if (Math.abs(e.touches[0].clientX - touchStartX.current) > 8) {
-        wasDragging.current = true
-      }
-    }
-
-    // Mouse drag for desktop testing
-    let mouseDown = false
-    let mouseStartX = 0
-    let startScroll = 0
-
-    const onMouseDown = (e: MouseEvent) => {
-      mouseDown = true
-      mouseStartX = e.clientX
-      startScroll = el.scrollLeft
-      wasDragging.current = false
-      el.style.cursor = 'grabbing'
-      e.preventDefault()
-    }
-    const onMouseMove = (e: MouseEvent) => {
-      if (!mouseDown) return
-      const dx = e.clientX - mouseStartX
-      if (Math.abs(dx) > 5) wasDragging.current = true
-      el.scrollLeft = startScroll - dx
-    }
-    const onMouseUp = () => {
-      mouseDown = false
-      el.style.cursor = 'grab'
-    }
-
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: true })
-    el.addEventListener('mousedown', onMouseDown)
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
-
-    return () => {
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('mousedown', onMouseDown)
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
-    }
-  }, [])
-
-  const handleClick = (key: PageKey) => {
-    if (wasDragging.current) {
-      wasDragging.current = false
-      return
-    }
-    onChangePage(key)
-  }
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const bottomItems = NAV.filter(n => BOTTOM_BAR_KEYS.includes(n.key))
+  const isOnSecondary = !BOTTOM_BAR_KEYS.includes(page)
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/50 bg-white/95 backdrop-blur-md lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-      <div
-        ref={scrollRef}
-        className="flex items-center gap-1 overflow-x-auto px-2 py-2 scrollbar-hide select-none"
-        style={{ WebkitOverflowScrolling: 'touch', scrollSnapType: 'x proximity', scrollbarWidth: 'none', cursor: 'grab' }}
-      >
-        {NAV.map(item => {
-          const Icon = item.icon
-          const active = page === item.key
-          return (
-            <button
-              key={item.key}
-              data-active={active}
-              onClick={() => handleClick(item.key)}
-              className={`flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl py-2 text-[10px] font-semibold transition ${active ? 'bg-brand-50 text-brand-600' : 'text-slate-400'}`}
-              style={{ scrollSnapAlign: 'center', minWidth: 'calc(25vw - 8px)' }}
-            >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.7} />
-              <span className="whitespace-nowrap">{item.label}</span>
-            </button>
-          )
-        })}
-      </div>
-    </nav>
+    <>
+      {/* Bottom bar */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/50 bg-white/95 backdrop-blur-md lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div className="flex items-center justify-around py-1.5 px-1">
+          {bottomItems.map(item => {
+            const Icon = item.icon
+            const active = page === item.key
+            return (
+              <button key={item.key} onClick={() => { onChangePage(item.key); setDrawerOpen(false) }}
+                className={`flex flex-1 flex-col items-center gap-0.5 py-1 text-[10px] font-semibold transition ${active ? 'text-brand-600' : 'text-slate-400'}`}>
+                <div className={`flex h-8 w-8 items-center justify-center rounded-xl transition ${active ? 'bg-brand-50' : ''}`}>
+                  <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.7} />
+                </div>
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+          {/* Menu/drawer button */}
+          <button onClick={() => setDrawerOpen(true)}
+            className={`flex flex-1 flex-col items-center gap-0.5 py-1 text-[10px] font-semibold transition ${isOnSecondary ? 'text-brand-600' : 'text-slate-400'}`}>
+            <div className={`flex h-8 w-8 items-center justify-center rounded-xl transition ${isOnSecondary ? 'bg-brand-50' : ''}`}>
+              <Menu className="h-5 w-5" strokeWidth={1.7} />
+            </div>
+            <span>Mais</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* Drawer overlay */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setDrawerOpen(false)}>
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-fadeIn" />
+
+          {/* Drawer panel */}
+          <div className="absolute bottom-0 left-0 right-0 animate-slideUp rounded-t-2xl bg-white shadow-xl"
+            onClick={e => e.stopPropagation()}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+            {/* Handle bar */}
+            <div className="flex justify-center py-3">
+              <div className="h-1 w-10 rounded-full bg-slate-200" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pb-3">
+              <div className="flex items-center gap-2.5">
+                <ArgusLogo size={22} />
+                <span className="text-sm font-bold text-slate-900">ARGUS</span>
+              </div>
+              <button onClick={() => setDrawerOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* All nav items */}
+            <div className="grid grid-cols-4 gap-1 px-4 pb-5">
+              {NAV.map(item => {
+                const Icon = item.icon
+                const active = page === item.key
+                return (
+                  <button key={item.key} onClick={() => { onChangePage(item.key); setDrawerOpen(false) }}
+                    className={`flex flex-col items-center gap-1 rounded-2xl py-3 transition ${active ? 'bg-brand-50 text-brand-600' : 'text-slate-500 active:bg-slate-50'}`}>
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${active ? 'bg-brand-100 text-brand-600' : 'bg-slate-100 text-slate-400'}`}>
+                      <Icon className="h-5 w-5" strokeWidth={active ? 2.2 : 1.7} />
+                    </div>
+                    <span className="text-[11px] font-semibold">{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
