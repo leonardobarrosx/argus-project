@@ -33,6 +33,9 @@ const (
 	refreshCookiePath = "/api/auth"
 )
 
+// dummyHash keeps login timing similar for unknown e-mails (bcrypt still runs).
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("argus-timing-equalizer"), bcrypt.DefaultCost)
+
 var errInvalidCredentials = httpx.Errf(http.StatusUnauthorized, "INVALID_CREDENTIALS", "e-mail ou senha inválidos")
 var errSessionExpired = httpx.Errf(http.StatusUnauthorized, "SESSION_EXPIRED", "sessão expirada, entre novamente")
 
@@ -198,7 +201,7 @@ func (h *Handler) Login(c *gin.Context) {
 		Scan(&userID, &tenantID, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Constant-ish time: still run bcrypt so timing doesn't reveal unknown e-mails.
-		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$7EqJtq98hPqEX7fNZaFWoO5ZQ1Z6Q4b0p1xvPpH5x0p4YQ2JQ8bX."), []byte(in.Password))
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(in.Password))
 		httpx.Fail(c, errInvalidCredentials)
 		return
 	}
