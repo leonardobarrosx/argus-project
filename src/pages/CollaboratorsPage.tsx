@@ -1,18 +1,16 @@
 import { useState } from 'react'
-import { UserPlus, Search, Phone, Mail, Edit2, Briefcase } from 'lucide-react'
+import { UserPlus, Search, Phone, Mail, Edit2, Briefcase, KeyRound } from 'lucide-react'
 import type { Collaborator } from '../types'
 import { Card } from '../components/ui/Card'
+import { ROLE_LABELS } from '../lib/permissions'
 
-const ROLE_LABELS: Record<Collaborator['role'], string> = {
-  gerente: 'Gerente', optometrista: 'Optometrista', vendedor: 'Vendedor(a)', montador: 'Montador(a)', atendente: 'Atendente',
-}
 const ROLE_COLORS: Record<Collaborator['role'], string> = {
-  gerente: 'bg-violet-100 text-violet-700', optometrista: 'bg-sky-100 text-sky-700', vendedor: 'bg-emerald-100 text-emerald-700',
+  proprietario: 'bg-slate-900 text-white', gerente: 'bg-violet-100 text-violet-700', optometrista: 'bg-sky-100 text-sky-700', vendedor: 'bg-emerald-100 text-emerald-700',
   montador: 'bg-amber-100 text-amber-700', atendente: 'bg-rose-100 text-rose-700',
 }
 
-export function CollaboratorsPage({ collaborators, onNew, onEdit, onToggleActive }: {
-  collaborators: Collaborator[]; onNew: () => void; onEdit: (c: Collaborator) => void; onToggleActive: (id: number) => void
+export function CollaboratorsPage({ collaborators, currentUserId, onNew, onEdit, onToggleActive }: {
+  collaborators: Collaborator[]; currentUserId: number; onNew: () => void; onEdit: (c: Collaborator) => void; onToggleActive: (id: number) => void
 }) {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
@@ -67,6 +65,8 @@ export function CollaboratorsPage({ collaborators, onNew, onEdit, onToggleActive
                       {ROLE_LABELS[c.role]}
                     </span>
                     {!c.active && <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-400">Inativo</span>}
+                    {c.hasAccess && <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600" title={c.lastLoginAt ? `Último acesso: ${new Date(c.lastLoginAt).toLocaleString('pt-BR')}` : 'Nunca acessou'}><KeyRound className="h-2.5 w-2.5" /> Acesso</span>}
+                    {c.id === currentUserId && <span className="inline-flex items-center rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-600">Você</span>}
                   </div>
                   <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                     {c.phone && <span className="flex items-center gap-1 text-xs text-slate-400"><Phone className="h-3 w-3" />{c.phone}</span>}
@@ -79,10 +79,10 @@ export function CollaboratorsPage({ collaborators, onNew, onEdit, onToggleActive
                 <button onClick={() => onEdit(c)} className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-400 transition hover:border-brand-300 hover:text-brand-600" title="Editar">
                   <Edit2 className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={() => onToggleActive(c.id)}
+                {c.id !== currentUserId && <button onClick={() => onToggleActive(c.id)}
                   className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${c.active ? 'border-slate-200 bg-white text-slate-500 hover:border-rose-300 hover:text-rose-500' : 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}>
                   {c.active ? 'Desativar' : 'Ativar'}
-                </button>
+                </button>}
               </div>
             </div>
           ))}

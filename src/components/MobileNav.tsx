@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Menu, X } from 'lucide-react'
 import type { PageKey } from '../types'
-import { NAV, BOTTOM_BAR_KEYS } from '../constants/navigation'
+import { BOTTOM_BAR_KEYS, type NavItem } from '../constants/navigation'
 import { ArgusLogo } from './ArgusLogo'
 
-export function MobileNav({ page, onChangePage }: { page: PageKey; onChangePage: (p: PageKey) => void }) {
+export function MobileNav({ page, onChangePage, nav }: { page: PageKey; onChangePage: (p: PageKey) => void; nav: NavItem[] }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const bottomItems = NAV.filter(n => BOTTOM_BAR_KEYS.includes(n.key))
-  const isOnSecondary = !BOTTOM_BAR_KEYS.includes(page)
+  const bottomItems = nav.filter(n => BOTTOM_BAR_KEYS.includes(n.key))
+  const isOnSecondary = !bottomItems.some(n => n.key === page)
 
   return (
     <>
@@ -67,7 +67,7 @@ export function MobileNav({ page, onChangePage }: { page: PageKey; onChangePage:
 
             {/* All nav items */}
             <div className="grid grid-cols-4 gap-1 px-4 pb-5">
-              {NAV.map(item => {
+              {nav.map(item => {
                 const Icon = item.icon
                 const active = page === item.key
                 return (

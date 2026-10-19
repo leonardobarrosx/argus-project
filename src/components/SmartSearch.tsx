@@ -27,8 +27,8 @@ export function SmartSearch({ patients, orders, onSelectPatient, onSelectOrder }
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
       <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)} onFocus={() => setFocused(true)}
         placeholder="Buscar paciente, CPF ou OS…"
-        className="h-10 w-full rounded-xl border border-slate-200/80 bg-slate-50/80 pl-10 pr-16 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100" />
-      <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-300">Ctrl K</kbd>
+        className="h-10 w-full rounded-xl border border-slate-200/80 bg-slate-50/80 pl-10 pr-4 sm:pr-16 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100" />
+      <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-md sm:block border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-300">Ctrl K</kbd>
       {focused && (fPatients.length > 0 || fOrders.length > 0) && (
         <div className="absolute left-0 top-full z-50 mt-1.5 w-full animate-fadeIn rounded-xl bg-white py-1 shadow-dropdown">
           {fPatients.length > 0 && <p className="px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">Pacientes</p>}

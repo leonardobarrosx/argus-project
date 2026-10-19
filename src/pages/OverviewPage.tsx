@@ -6,15 +6,19 @@ import { Badge } from '../components/ui/Badge'
 import { SectionTitle } from '../components/ui/SectionTitle'
 import { ActionRowCRM } from '../components/ActionRowCRM'
 
-export function OverviewPage({ patients, prescriptions, orders, stock, sales, suggestions, onAdvanceOrder, onOpenCampaign, onGoToPage }: {
+export function OverviewPage({ patients, prescriptions, orders, stock, sales, suggestions, onAdvanceOrder, onOpenCampaign, onGoToPage, userName }: {
   patients: Patient[]; prescriptions: Prescription[]; orders: ServiceOrder[]; stock: StockItem[]; sales: Sale[];
-  suggestions: Suggestion[]; onAdvanceOrder: (id: string) => void;
+  suggestions: Suggestion[]; onAdvanceOrder: (id: string) => void; userName: string;
   onOpenCampaign: () => void; onGoToPage: (p: PageKey) => void
 }) {
   const inProd = orders.filter(o => o.status === 'production').length
   const ready = orders.filter(o => o.status === 'ready').length
   const lowStock = stock.filter(s => s.qty <= s.min).length
-  const totalRevenue = sales.reduce((s, x) => s + x.total, 0)
+  const monthKey = TODAY.slice(3)
+  const monthSales = sales.filter(s => s.date.slice(3) === monthKey)
+  const totalRevenue = monthSales.reduce((s, x) => s + x.total, 0)
+  const receivables = orders.filter(o => !o.paid && o.status !== 'cancelled' && o.total > 0)
+  const firstName = userName.split(' ').find(w => !/^(dr|dra)\.?$/i.test(w)) ?? userName
 
   // Birthdays today
   const birthdaysToday = patients.filter(p => {
@@ -34,7 +38,7 @@ export function OverviewPage({ patients, prescriptions, orders, stock, sales, su
   const salesToday = sales.filter((s) => s.date === TODAY).length
 
   const metrics = [
-    { label: 'Faturamento', value: `R$ ${totalRevenue.toFixed(2).replace('.', ',')}`, trend: `${sales.length} venda(s)`, dir: 'up' as const, icon: TrendingUp, spark: 'M0 18 C10 10,20 14,30 8 C40 3,50 11,60 2' },
+    { label: 'Faturamento do mês', value: `R$ ${totalRevenue.toFixed(2).replace('.', ',')}`, trend: `${monthSales.length} venda(s) · ${receivables.length} OS a receber`, dir: 'up' as const, icon: TrendingUp, spark: 'M0 18 C10 10,20 14,30 8 C40 3,50 11,60 2' },
     { label: 'Produção / Prontos', value: `${inProd} / ${ready}`, trend: `${orders.length} OS total`, dir: 'neutral' as const, icon: Microscope, spark: 'M0 10 C10 4,20 9,30 16 C40 18,50 13,60 9' },
     { label: 'Alertas de estoque', value: String(lowStock), trend: `${stock.length} produtos`, dir: lowStock > 0 ? 'down' as const : 'neutral' as const, icon: AlertTriangle, spark: 'M0 14 C8 13,16 12,24 12 C34 12,44 8,60 8' },
   ]
@@ -44,7 +48,7 @@ export function OverviewPage({ patients, prescriptions, orders, stock, sales, su
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[13px] text-slate-400">{TODAY} · {patients.length} pacientes · {prescriptions.length} receitas</p>
-          <h1 className="mt-1 text-xl font-semibold text-slate-900 sm:text-2xl">Bem-vinda, Dra. Eliza</h1>
+          <h1 className="mt-1 text-xl font-semibold text-slate-900 sm:text-2xl">Olá, {firstName}</h1>
         </div>
         <div className="flex gap-2">
           <button onClick={onOpenCampaign} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-brand-300 hover:text-brand-600">
@@ -167,7 +171,7 @@ export function OverviewPage({ patients, prescriptions, orders, stock, sales, su
                   </div>
                   <div className="max-h-[280px] space-y-2 overflow-y-auto pr-1">
                     {colOrders.length === 0 && <p className="py-3 text-center text-xs text-slate-300">Vazio</p>}
-                    {colOrders.map(o => {
+                    {colOrders.slice(-8).reverse().map(o => {
                       const pat = patients.find(p => p.id === o.patientId)
                       return (
                         <div key={o.id} className="rounded-xl border border-slate-100 bg-white p-2.5">
@@ -178,9 +182,8 @@ export function OverviewPage({ patients, prescriptions, orders, stock, sales, su
                           <p className="text-xs text-slate-400">Criada: {o.createdAt}</p>
                           {status !== 'delivered' && (
                             <button onClick={() => onAdvanceOrder(o.id)}
-                              disabled={status === 'ready' && !sales.some(s => s.orderId === o.id)}
-                              className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-brand-500 transition hover:text-brand-700 disabled:opacity-40 disabled:pointer-events-none">
-                              <ChevronRight className="h-3 w-3" />{status === 'production' ? 'Marcar pronto' : 'Marcar entregue'}
+                              className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-brand-500 transition hover:text-brand-700">
+                              <ChevronRight className="h-3 w-3" />{status === 'production' ? 'Marcar pronto' : !o.paid && o.total > 0 ? 'Receber e entregar' : 'Marcar entregue'}
                             </button>
                           )}
                         </div>

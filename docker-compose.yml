@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: argus
+      POSTGRES_PASSWORD: argus
+      POSTGRES_DB: argus
+      APP_DB_PASSWORD: argus_app
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/db-init.sh:/docker-entrypoint-initdb.d/001_app_role.sh:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U argus']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - '8080:8080'
+    environment:
+      DATABASE_URL: postgres://argus_app:argus_app@db:5432/argus?sslmode=disable
+      MIGRATION_DATABASE_URL: postgres://argus:argus@db:5432/argus?sslmode=disable
+      JWT_SECRET: dev-jwt-secret-change-this-32chars-min-123456
+      COOKIE_SECURE: 'false'
+      GIN_MODE: release
+      CORS_ORIGINS: http://localhost:5173,http://localhost:8081
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '8081:80'
+
+volumes:
+  postgres_data:

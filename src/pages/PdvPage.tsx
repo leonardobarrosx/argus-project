@@ -1,58 +1,75 @@
 import { useState } from 'react'
-import { Search, UserPlus, UserRound, X, Plus, Glasses, Trash2, ShoppingCart, Check, CreditCard, Users } from 'lucide-react'
-import type { StockItem, Patient, CartItem, CartGlassesItem } from '../types'
+import { Search, UserPlus, UserRound, X, Plus, Glasses, Trash2, ShoppingCart, CreditCard, Users, Lock, Printer, Loader2 } from 'lucide-react'
+import type { StockItem, Patient, CartItem, CartGlassesItem, Sale } from '../types'
+import { PAYMENT_METHODS, addDaysISO, brl, parseMoney, todayISO } from '../utils/format'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { SectionTitle } from '../components/ui/SectionTitle'
 import { SelectField } from '../components/ui/SelectField'
+import { FormField } from '../components/ui/FormField'
 
-export function PdvPage({ stock, patients, cart, glassesCart, cartTotal,
+const AVULSO_EXCLUDED = ['Armações', 'Lentes']
+
+export function PdvPage({ stock, patients, cart, glassesCart, cartTotal, glassesTotal,
   onAddToCart, onRemoveFromCart, onRemoveGlasses, onClearCart, onFinalizeSale,
   pdvClientId, onSelectClient, onOpenNewClient, onOpenNewDependent, onOpenAddGlasses,
-  getDependents, generateOs, onToggleOs, osPaid, onToggleOsPaid }: {
+  getDependents, generateOs, onToggleOs, osPaid, onToggleOsPaid, cashBlocked, onGoToCash, lastSale, onPrintSale }: {
   stock: StockItem[]; patients: Patient[];
-  cart: CartItem[]; glassesCart: CartGlassesItem[]; cartTotal: number;
+  cart: CartItem[]; glassesCart: CartGlassesItem[]; cartTotal: number; glassesTotal: number;
   onAddToCart: (name: string, price: number, stockItemId: number) => void; onRemoveFromCart: (id: number) => void;
   onRemoveGlasses: (id: number) => void; onClearCart: () => void;
-  onFinalizeSale: (pm: string) => boolean;
+  onFinalizeSale: (pm: string, discount: number, dueDate: string) => Promise<boolean>;
+  cashBlocked: boolean; onGoToCash: () => void; lastSale: Sale | null; onPrintSale: (s: Sale) => void;
   pdvClientId: number | null; onSelectClient: (id: number | null) => void;
   onOpenNewClient: () => void; onOpenNewDependent: () => void; onOpenAddGlasses: () => void;
   getDependents: (id: number) => Patient[];
   generateOs: boolean; onToggleOs: (v: boolean) => void;
   osPaid: boolean; onToggleOsPaid: (v: boolean) => void;
 }) {
-  const [saleCompleted, setSaleCompleted] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [saleError, setSaleError] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('Cartão crédito')
+  const [discountText, setDiscountText] = useState('')
+  const [dueDate, setDueDate] = useState(addDaysISO(todayISO(), 7))
   const [catalogSearch, setCatalogSearch] = useState('')
   const [clientSearch, setClientSearch] = useState('')
 
   const hasItems = cart.length > 0 || glassesCart.length > 0
+  const deferGlasses = glassesCart.length > 0 && generateOs && !osPaid
+  const chargeNow = deferGlasses ? cartTotal - glassesTotal : cartTotal
+  const discount = discountText ? parseMoney(discountText) : 0
+  const discountInvalid = !(discount >= 0) || discount > chargeNow
+  const payable = Math.max(chargeNow - (discountInvalid ? 0 : discount), 0)
+  const blockedByCash = cashBlocked && chargeNow > 0
 
-  const handleFinalize = () => {
-    if (!hasItems) return
+  const handleFinalize = async () => {
+    if (!hasItems || saving) return
     if (!pdvClientId) {
       setSaleError('Selecione um cliente para finalizar a venda.')
       return
     }
-    const ok = onFinalizeSale(paymentMethod)
-    if (!ok) {
-      setSaleError('Verifique estoque e cliente antes de finalizar.')
+    if (discountInvalid) {
+      setSaleError('Desconto inválido.')
       return
     }
     setSaleError('')
-    setSaleCompleted(true)
-    setTimeout(() => setSaleCompleted(false), 2500)
+    setSaving(true)
+    const ok = await onFinalizeSale(paymentMethod, discount, dueDate)
+    setSaving(false)
+    if (ok) {
+      setDiscountText('')
+      setDueDate(addDaysISO(todayISO(), 7))
+    }
   }
 
-  // Catalog: accessories only (frames are in glasses flow)
-  const catalog = stock.filter(s => s.qty > 0 && (s.category === 'Acessórios' || s.category === 'Tratamentos'))
+  // Catalog: products sold individually (frames go through the glasses flow; stock lenses through the lab)
+  const catalog = stock.filter(s => s.qty > 0 && !AVULSO_EXCLUDED.includes(s.category))
   const catalogFiltered = catalogSearch ? catalog.filter(s => s.name.toLowerCase().includes(catalogSearch.toLowerCase())) : catalog
 
   // Client search list (only "responsáveis", not dependents at top level)
   const mainClients = patients.filter(p => !p.parentId)
   const clientsFiltered = clientSearch
-    ? mainClients.filter(p => p.name.toLowerCase().includes(clientSearch.toLowerCase()) || p.cpf.includes(clientSearch))
+    ? mainClients.filter(p => p.name.toLowerCase().includes(clientSearch.toLowerCase()) || (p.cpf && p.cpf.includes(clientSearch)) || (p.phone && clientSearch.replace(/\D/g, '') !== '' && p.phone.replace(/\D/g, '').includes(clientSearch.replace(/\D/g, ''))))
     : mainClients
 
   const selectedClient = pdvClientId ? patients.find(p => p.id === pdvClientId) : null
@@ -65,8 +82,24 @@ export function PdvPage({ stock, patients, cart, glassesCart, cartTotal,
           <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Ponto de venda</h1>
           <p className="mt-0.5 text-[13px] text-slate-400">Selecione o cliente, monte os óculos e finalize a venda</p>
         </div>
-        <Badge color="emerald">PDV ativo</Badge>
+        {cashBlocked ? <Badge color="amber"><Lock className="h-3 w-3" /> Caixa fechado</Badge> : <Badge color="emerald">PDV ativo</Badge>}
       </div>
+
+      {cashBlocked && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-medium text-amber-800">O caixa está fechado. Abra o caixa para registrar vendas.</p>
+          <button onClick={onGoToCash} className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600">Abrir caixa</button>
+        </div>
+      )}
+
+      {lastSale && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <p className="text-sm font-medium text-emerald-800">Última venda: #{lastSale.id} · {brl(lastSale.total)} · {lastSale.paymentMethod}</p>
+          <button onClick={() => onPrintSale(lastSale)} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+            <Printer className="h-3.5 w-3.5" /> Imprimir recibo
+          </button>
+        </div>
+      )}
 
       {/* ── 1. Client selection ── */}
       <Card>
@@ -93,7 +126,7 @@ export function PdvPage({ stock, patients, cart, glassesCart, cartTotal,
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-500"><UserRound className="h-4 w-4" /></div>
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{p.name}</p>
-                    <p className="text-xs text-slate-400">{p.cpf} · {p.phone}</p>
+                    <p className="text-xs text-slate-400">{[p.cpf, p.phone].filter(Boolean).join(' · ') || 'Sem documento'}</p>
                   </div>
                 </button>
               ))}
@@ -106,7 +139,7 @@ export function PdvPage({ stock, patients, cart, glassesCart, cartTotal,
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-100 text-brand-600"><UserRound className="h-5 w-5" /></div>
                 <div>
                   <p className="text-sm font-semibold text-slate-900">{selectedClient.name}</p>
-                  <p className="text-xs text-slate-400">{selectedClient.cpf} · {selectedClient.phone}</p>
+                  <p className="text-xs text-slate-400">{[selectedClient.cpf, selectedClient.phone].filter(Boolean).join(' · ') || 'Sem documento'}</p>
                 </div>
               </div>
               <button onClick={() => onSelectClient(null)} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white hover:text-rose-500">
@@ -155,19 +188,20 @@ export function PdvPage({ stock, patients, cart, glassesCart, cartTotal,
 
           {/* Accessories catalog */}
           <Card>
-            <SectionTitle title="Produtos avulsos" sub={`${catalog.length} acessórios e tratamentos disponíveis`} />
+            <SectionTitle title="Produtos avulsos" sub={`${catalog.length} produto(s) disponível(is)`} />
             <div className="relative mb-3 max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
               <input value={catalogSearch} onChange={e => setCatalogSearch(e.target.value)} placeholder="Buscar produto…"
                 className="h-9 w-full rounded-xl border border-slate-200/80 bg-slate-50/80 pl-10 pr-4 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100" />
             </div>
             <div className="max-h-[300px] grid gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+              {catalogFiltered.length === 0 && <p className="col-span-full py-6 text-center text-sm text-slate-400">Nenhum produto avulso em estoque</p>}
               {catalogFiltered.map(item => (
                 <button key={item.id} onClick={() => onAddToCart(item.name, item.price, item.id)}
                   className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 text-left transition hover:border-brand-200 hover:bg-brand-50/30 active:scale-[0.99]">
                   <div>
                     <p className="text-sm font-medium text-slate-800">{item.name}</p>
-                    <p className="text-xs text-slate-400">R$ {item.price.toFixed(2)} · {item.qty} em estoque</p>
+                    <p className="text-xs text-slate-400">{brl(item.price)} · {item.qty} em estoque</p>
                   </div>
                   <Plus className="h-4 w-4 text-brand-400" />
                 </button>
@@ -198,10 +232,10 @@ export function PdvPage({ stock, patients, cart, glassesCart, cartTotal,
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <p className="text-xs text-slate-600">Armação: {g.frameName} · R$ {g.framePrice.toFixed(2)}</p>
-                  <p className="text-xs text-slate-600">Lente: {g.lensName} · R$ {g.lensPrice.toFixed(2)}</p>
+                  <p className="text-xs text-slate-600">Armação: {g.frameName} · {brl(g.framePrice)}</p>
+                  <p className="text-xs text-slate-600">Lente: {g.lensName} · {brl(g.lensPrice)}</p>
                   {g.isReadyMade && <Badge color="slate">Óculos pronto</Badge>}
-                  <p className="mt-1 text-xs font-semibold text-brand-600">Subtotal: R$ {(g.framePrice + g.lensPrice).toFixed(2)}</p>
+                  <p className="mt-1 text-xs font-semibold text-brand-600">Subtotal: {brl(g.framePrice + g.lensPrice)}</p>
                 </div>
               ))}
               {/* Accessory items */}
@@ -209,7 +243,7 @@ export function PdvPage({ stock, patients, cart, glassesCart, cartTotal,
                 <div key={c.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2.5">
                   <div>
                     <p className="text-sm font-medium text-slate-800">{c.name}</p>
-                    <p className="text-xs text-slate-400">{c.qty}× R$ {c.price.toFixed(2)}</p>
+                    <p className="text-xs text-slate-400">{c.qty}× {brl(c.price)}</p>
                   </div>
                   <button onClick={() => onRemoveFromCart(c.id)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-rose-500"><X className="h-4 w-4" /></button>
                 </div>
@@ -236,21 +270,45 @@ export function PdvPage({ stock, patients, cart, glassesCart, cartTotal,
                     </label>
                   )}
                   {generateOs && !osPaid && (
-                    <p className="text-xs text-amber-600 ml-6">OS será gerada como "não paga" — cobrar na entrega</p>
+                    <p className="text-xs text-amber-600 ml-6">Os óculos ({brl(glassesTotal)}) ficam “a receber” e são cobrados na entrega</p>
+                  )}
+                  {generateOs && (
+                    <div className="ml-6 max-w-[200px]">
+                      <FormField label="Previsão de entrega" type="date" value={dueDate} onChange={setDueDate} placeholder="" />
+                    </div>
                   )}
                 </div>
               )}
 
-              <SelectField label="Forma de pagamento" value={paymentMethod} onChange={setPaymentMethod}
-                options={[{ value: 'Cartão crédito', label: 'Cartão crédito' }, { value: 'Cartão débito', label: 'Cartão débito' }, { value: 'PIX', label: 'PIX' }, { value: 'Dinheiro', label: 'Dinheiro' }, { value: 'Boleto', label: 'Boleto' }]} />
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">Total</span>
-                <span className="text-lg font-bold text-slate-900">R$ {cartTotal.toFixed(2)}</span>
+              {chargeNow > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  <SelectField label="Forma de pagamento" value={paymentMethod} onChange={setPaymentMethod}
+                    options={PAYMENT_METHODS.map(m => ({ value: m, label: m }))} />
+                  <FormField label="Desconto (R$)" value={discountText} onChange={setDiscountText} placeholder="0,00" />
+                </div>
+              )}
+              <div className="space-y-1 text-sm">
+                {deferGlasses && (
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>A receber na entrega (OS)</span><span>{brl(glassesTotal)}</span>
+                  </div>
+                )}
+                {!discountInvalid && discount > 0 && (
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>Desconto</span><span>−{brl(discount)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">{deferGlasses ? 'Cobrar agora' : 'Total'}</span>
+                  <span className="text-lg font-bold text-slate-900">{brl(payable)}</span>
+                </div>
               </div>
-              <button onClick={handleFinalize} disabled={saleCompleted || !pdvClientId}
-                className="w-full rounded-xl bg-brand-500 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 active:scale-[0.99] disabled:opacity-60">
-                {saleCompleted ? <><Check className="mr-2 inline h-4 w-4" /> Venda registrada!</> : <><CreditCard className="mr-2 inline h-4 w-4" /> Finalizar venda</>}
+              <button onClick={handleFinalize} disabled={saving || !pdvClientId || blockedByCash}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-600 active:scale-[0.99] disabled:opacity-60">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                {chargeNow > 0 ? 'Finalizar venda' : 'Gerar OS'}
               </button>
+              {blockedByCash && <p className="text-xs font-medium text-amber-600">Abra o caixa para finalizar.</p>}
               {saleError && <p className="text-xs font-medium text-rose-600">{saleError}</p>}
             </div>
           )}
