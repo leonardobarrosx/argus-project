@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { ArgusLogo } from '../components/ArgusLogo'
 import { api, errorMessage } from '../api'
 import type { SessionDTO } from '../api/types'
@@ -7,7 +7,8 @@ import type { SessionDTO } from '../api/types'
 type Mode = 'login' | 'register'
 
 export function LoginPage({ onSession, notice }: { onSession: (s: SessionDTO) => void; notice?: string }) {
-  const [mode, setMode] = useState<Mode>('login')
+  // /app?cadastro=1 (the landing page's sign-up buttons) opens on "Criar conta".
+  const [mode, setMode] = useState<Mode>(() => new URLSearchParams(window.location.search).has('cadastro') ? 'register' : 'login')
   const [form, setForm] = useState({ storeName: '', name: '', email: '', password: '' })
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -40,6 +41,9 @@ export function LoginPage({ onSession, notice }: { onSession: (s: SessionDTO) =>
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f6f8fb] px-4 py-10">
       <div className="w-full max-w-sm animate-rise">
+        <a href="/" className="mb-6 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 transition hover:text-slate-600">
+          <ArrowLeft className="h-3.5 w-3.5" /> Voltar ao site
+        </a>
         <div className="mb-6 flex flex-col items-center text-center">
           <ArgusLogo size={44} />
           <h1 className="mt-3 text-xl font-bold tracking-tight text-slate-900">ARGUS</h1>

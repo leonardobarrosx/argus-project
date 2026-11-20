@@ -47,7 +47,7 @@ docker compose up -d --build
 docker compose exec api argus-seed
 ```
 
-- Front: http://localhost:8081
+- Front: http://localhost:8081 (landing) e http://localhost:8081/app (sistema)
 - API: http://localhost:8080 (`/health`)
 
 ## Rodando em desenvolvimento
@@ -70,6 +70,11 @@ go run ./cmd/server                     # :8080
 npm install
 npm run dev                             # :5173 — /api é encaminhado para :8080
 ```
+
+A landing page fica em `/` e o sistema em `/app` (`/app?cadastro=1` abre direto em
+“Criar conta”). Cada uma é um chunk separado, então quem visita a landing não baixa o
+app. Em produção o servidor precisa devolver o `index.html` para qualquer rota
+(`deploy/nginx.conf` e `vercel.json` já fazem isso).
 
 Logins da demonstração: `demo@argus.app` (proprietária) e `julia@argus.app`
 (vendedora), ambos com a senha `argus123`. Recrie a demo com `go run ./cmd/seed -reset`.
