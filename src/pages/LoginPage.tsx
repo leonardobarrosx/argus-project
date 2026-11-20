@@ -39,7 +39,7 @@ export function LoginPage({ onSession, notice }: { onSession: (s: SessionDTO) =>
   const input = 'w-full rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand-100'
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6f8fb] px-4 py-10">
+    <div className="flex min-h-screen w-full items-center justify-center bg-[#f6f8fb] px-4 py-10">
       <div className="w-full max-w-sm animate-rise">
         <a href="/" className="mb-6 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 transition hover:text-slate-600">
           <ArrowLeft className="h-3.5 w-3.5" /> Voltar ao site

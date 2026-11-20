@@ -364,8 +364,8 @@ function Security() {
   return (
     <section id="seguranca" className="lp-dark relative scroll-mt-20 overflow-hidden py-24 sm:py-32">
       <div className="lp-rings" aria-hidden />
-      <div className="relative mx-auto grid max-w-6xl gap-14 px-4 sm:px-6 lg:grid-cols-[1fr_1.1fr] lg:items-center">
-        <div>
+      <div className="relative mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)] gap-14 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center">
+        <div className="min-w-0">
           <SectionHead light kicker="Segurança" title="Os dados da sua ótica não se misturam com os de ninguém." text="O Argus é multi-óticas desde o banco de dados. A API em Go roda com um usuário que não consegue ignorar o isolamento." />
           <pre className="lp-code mt-8" data-reveal aria-label="Exemplo da política de isolamento no PostgreSQL"><code>
 <span className="c">-- cada transação sabe de qual ótica é</span>{'\n'}
@@ -429,7 +429,7 @@ function FinalCta() {
         </div>
         <div className="lp-snellen relative mx-auto hidden w-full max-w-[260px] select-none rounded-2xl bg-white px-6 py-7 text-center sm:block" aria-hidden>
           {rows.map((r, i) => (
-            <p key={r} className="lp-snellen-row font-extrabold text-slate-900" style={{ ['--i' as string]: i, fontSize: `${54 - i * 10}px`, letterSpacing: `${0.12 + i * 0.04}em` }}>
+            <p key={r} className="lp-snellen-row font-extrabold text-slate-900" style={{ ['--i' as string]: i, fontSize: `${[56, 42, 31, 23, 17][i]}px`, letterSpacing: `${0.12 + i * 0.05}em` }}>
               {r === 'A R G U S' ? <span className="text-brand-500">{r}</span> : r}
             </p>
           ))}

@@ -37,7 +37,7 @@ export default function Root() {
 
   if (state.kind === 'loading') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f6f8fb]">
+      <div className="flex min-h-screen w-full items-center justify-center bg-[#f6f8fb]">
         <Loader2 className="h-6 w-6 animate-spin text-brand-500" aria-label="Carregando" />
       </div>
     )
@@ -45,7 +45,7 @@ export default function Root() {
   if (state.kind === 'anonymous') return <LoginPage onSession={onSession} notice={state.notice} />
   if (state.kind === 'error') {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#f6f8fb] px-4 text-center">
+      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-3 bg-[#f6f8fb] px-4 text-center">
         <p className="text-sm font-medium text-slate-700">Não foi possível carregar os dados.</p>
         <p className="text-xs text-slate-400">{state.message}</p>
         <div className="flex gap-2">

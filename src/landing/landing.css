@@ -142,7 +142,7 @@
 }
 @media (min-width: 1024px) {
   .lp-tilt {
-    transform: perspective(1800px) rotateY(-7deg) rotateX(2deg);
+    transform: perspective(2000px) rotateY(-5deg) rotateX(1.5deg);
     transform-origin: left center;
     transition: transform 800ms var(--ease-out);
   }
@@ -352,7 +352,7 @@
   transform: rotate(3deg);
 }
 .lp-snellen-row {
-  line-height: 1.25;
+  line-height: 1.35;
   filter: blur(6px);
   opacity: 0.2;
   transition: filter 900ms var(--ease-out), opacity 900ms var(--ease-out);
