@@ -33,6 +33,10 @@ services:
       COOKIE_SECURE: 'false'
       GIN_MODE: release
       CORS_ORIGINS: http://localhost:5173,http://localhost:8081
+      # Chave usada para cifrar segredos de webhooks e chaves de IA das óticas.
+      SECRETS_KEY: dev-secrets-key-change-this
+      # Opcional: chave da Anthropic usada quando a ótica não cadastra a própria.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
 
   web:
     build: .

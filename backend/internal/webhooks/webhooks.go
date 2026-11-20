@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -445,7 +446,7 @@ func (h *Handler) Retry(c *gin.Context) {
 			UPDATE webhook_deliveries SET status='pending', next_attempt_at=NOW(), locked_until=NULL,
 			       attempts = LEAST(attempts, $2 - 1)
 			WHERE id=$1 AND status <> 'delivered' RETURNING `+deliveryColumns, id, MaxAttempts))
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return httpx.Unprocessable("INVALID_STATUS", "entrega não encontrada ou já entregue")
 		}
 		return err
