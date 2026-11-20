@@ -1,6 +1,6 @@
 export type PageKey =
   | 'overview' | 'pdv' | 'cash' | 'patients' | 'lab' | 'stock' | 'suppliers'
-  | 'finance' | 'collaborators' | 'reports' | 'settings'
+  | 'finance' | 'collaborators' | 'reports' | 'assistant' | 'integrations' | 'settings'
 
 export type Role = 'proprietario' | 'gerente' | 'optometrista' | 'vendedor' | 'montador' | 'atendente'
 

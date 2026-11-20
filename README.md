@@ -14,7 +14,7 @@ A arquitetura segue o padrão dos projetos **VESTA** e **meuchamado**: API em Go
 
 | Camada    | Tecnologia |
 |-----------|------------|
-| Backend   | Go 1.23, Gin, pgx/v5, JWT HS256 + refresh token rotativo (cookie httpOnly) |
+| Backend   | Go 1.25, Gin, pgx/v5, JWT HS256 + refresh token rotativo (cookie httpOnly) |
 | Banco     | PostgreSQL 16 — schema compartilhado com `tenant_id` + **RLS** |
 | Frontend  | React 19, Vite, TypeScript, Tailwind CSS |
 | Testes    | Testes de integração Go contra Postgres real (rodando sob role restrito) |
@@ -30,6 +30,10 @@ A arquitetura segue o padrão dos projetos **VESTA** e **meuchamado**: API em Go
 │       ├── db/migrations    SQL (embed) — schema, RLS e funções de auth
 │       ├── auth, team, tenant, patients, suppliers, stock,
 │       ├── orders, sales, cash, finance, bootstrap
+│       ├── apikeys, publicapi   chaves de API e API pública /api/v1
+│       ├── webhooks             eventos (outbox), entrega assinada e reenvio
+│       ├── ai                   assistente com Claude (ferramentas só leitura)
+│       ├── secretbox            cifra AES-256-GCM de segredos
 │       └── router           monta as rotas + testes de integração
 ├── src/                     front-end React
 │   ├── api/                 cliente HTTP (refresh automático), DTOs e mapeadores
@@ -158,3 +162,82 @@ Todas as rotas abaixo de `/api` exigem `Authorization: Bearer <token>`, exceto a
 
 Erros seguem `{ "error": "mensagem", "code": "CODIGO" }` (ex.: `CASH_CLOSED`,
 `ORDER_UNPAID`, `INSUFFICIENT_STOCK`, `EXPIRED_PRESCRIPTION`).
+
+## Integrações (Integrações no menu, só gerência)
+
+### API pública v1
+
+Outro sistema (e-commerce, BI, planilha) acessa os dados com uma **chave de API**
+criada na tela Integrações. A chave (`argus_sk_…`) aparece uma única vez; o banco guarda
+só o hash SHA-256. Cada chave tem permissões (`patients:read`, `patients:write`,
+`catalog:read`, `stock:read`, `orders:read`, `sales:read`, `finance:read`), validade
+opcional, rate limit próprio e pode ser revogada a qualquer momento.
+
+```bash
+curl https://sua-otica.com/api/v1/products?lowStock=true \
+  -H "Authorization: Bearer argus_sk_..."      # ou X-API-Key: argus_sk_...
+```
+
+| Método | Rota (`/api/v1`) | Permissão |
+|--------|------------------|-----------|
+| GET | `/me` | — |
+| GET | `/patients?q=&createdSince=` · `/patients/:id` | `patients:read` |
+| POST | `/patients` | `patients:write` |
+| GET | `/products?category=&lowStock=&active=` · `/lenses` | `catalog:read` |
+| GET | `/stock/movements?from=&to=&productId=` | `stock:read` |
+| GET | `/orders?status=` · `/orders/:number` | `orders:read` |
+| GET | `/sales?from=&to=&status=` | `sales:read` |
+| GET | `/payables?status=` · `/finance/summary?from=&to=` | `finance:read` |
+
+Listas aceitam `limit` (até 200) e `offset` e respondem `{ data, limit, offset, hasMore }`.
+
+### Webhooks
+
+Eventos: `sale.created`, `sale.cancelled`, `order.created`, `order.status_changed`,
+`order.paid`, `order.cancelled`, `patient.created`, `stock.low`, `payable.created`,
+`payable.paid`, `cash.closed`.
+
+- **Outbox transacional**: a entrega é gravada na mesma transação da venda/OS/estoque,
+  então nenhum evento se perde nem é enviado para algo que deu rollback.
+- Um dispatcher em segundo plano entrega com lease (`FOR UPDATE SKIP LOCKED`, seguro com
+  várias réplicas), até 6 tentativas com backoff de 30 s × 4ⁿ. Falhas podem ser reenviadas
+  pela tela, que mostra o histórico de entregas com corpo e resposta.
+- Corpo `{ id, type, createdAt, data }` e cabeçalhos `X-Argus-Event`, `X-Argus-Event-Id`
+  (para deduplicar) e `X-Argus-Signature: t=<unix>,v1=<hmac>`, onde
+  `v1 = HMAC-SHA256(segredo, "<t>.<corpo>")`. O segredo (`whsec_…`) fica cifrado no banco.
+- Proteção contra SSRF: só `https://` para endereços públicos, sem redirects nem proxy;
+  IPs privados, loopback e metadata de nuvem são bloqueados na conexão.
+
+```js
+const parts = Object.fromEntries(header.split(',').map(p => p.split('=')))
+const expected = crypto.createHmac('sha256', secret).update(`${parts.t}.${rawBody}`).digest('hex')
+const ok = crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1))
+```
+
+## Assistente de IA
+
+Chat (menu **Assistente IA**, só gerência) em que o Claude, da Anthropic, responde sobre a
+ótica: relatórios sob medida, sugestão de compra, giro e movimentação de estoque, análise
+financeira, laboratório, contas a pagar, caixa e pacientes (receitas vencendo,
+aniversariantes, quem não compra há tempo).
+
+- Usa a Messages API com **tool use**: o modelo chama 10 ferramentas que consultam o
+  banco da própria ótica em transação `READ ONLY` sob RLS. Ele nunca escreve nada e nunca
+  vê dados de outra ótica. Ferramentas com schema estrito e saída limitada.
+- A resposta chega por **SSE** (o front mostra “Lendo o estoque…”, “Calculando sugestões
+  de compra…”), fica salva no histórico de conversas e pode ser copiada ou impressa.
+- Cada ótica escolhe o modelo (Opus 5.5 padrão, Sonnet 5.5 ou Haiku 5.5), o nível de
+  análise (esforço), instruções próprias (metas, margens) e pode cadastrar a **própria
+  chave da Anthropic**, guardada cifrada. Sem chave própria, usa `ANTHROPIC_API_KEY`
+  do servidor. A tela mostra o consumo de tokens do mês.
+- Prompt caching no system prompt fixo e fallback automático de modelo quando o
+  principal está sobrecarregado.
+
+### Variáveis de ambiente novas
+
+| Variável | Uso |
+|----------|-----|
+| `SECRETS_KEY` | Cifra segredos de webhooks e chaves de IA (padrão: derivada do `JWT_SECRET`) |
+| `ANTHROPIC_API_KEY` | Chave usada pelo assistente quando a ótica não tem a própria |
+| `AI_DEFAULT_MODEL` | Modelo padrão (`claude-opus-5-5`) |
+| `WEBHOOK_ALLOW_PRIVATE` | `true` libera `http://` e IPs privados (só desenvolvimento) |
