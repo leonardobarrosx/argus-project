@@ -102,13 +102,15 @@ func IPRateLimit(rps float64, burst int) gin.HandlerFunc {
 	}
 }
 
-// UserRateLimit limits requests per authenticated user (falls back to IP).
+// UserRateLimit limits requests per authenticated user or API key (falls back to IP).
 func UserRateLimit(rps float64, burst int) gin.HandlerFunc {
 	ls := newLimiterSet(rps, burst)
 	return func(c *gin.Context) {
 		key := c.ClientIP()
 		if a := GetActor(c); a.UserID > 0 {
 			key = "u:" + strconv.FormatInt(a.UserID, 10)
+		} else if a.KeyID > 0 {
+			key = "k:" + strconv.FormatInt(a.KeyID, 10)
 		}
 		if !ls.allow(key) {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "muitas requisições, tente novamente em instantes", "code": "RATE_LIMITED"})

@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, ShoppingCart, UserRound, FlaskConical, Boxes, Briefcase, BarChart3, Wallet, Landmark,
-  Truck, Settings,
+  Truck, Settings, Sparkles, Plug,
 } from 'lucide-react'
 import type { PageKey } from '../types'
 
@@ -17,6 +17,8 @@ export const NAV: NavItem[] = [
   { key: 'finance', label: 'Financeiro', icon: Landmark },
   { key: 'collaborators', label: 'Equipe', icon: Briefcase },
   { key: 'reports', label: 'Relatórios', icon: BarChart3 },
+  { key: 'assistant', label: 'Assistente IA', icon: Sparkles },
+  { key: 'integrations', label: 'Integrações', icon: Plug },
   { key: 'settings', label: 'Configurações', icon: Settings },
 ]
 

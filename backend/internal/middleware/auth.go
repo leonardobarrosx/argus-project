@@ -36,13 +36,32 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// Actor is the authenticated user performing a request.
+// RoleAPI is the role of requests authenticated with an API key.
+const RoleAPI = "api"
+
+// Actor is the authenticated user performing a request. Requests made with an
+// API key have Role RoleAPI, UserID 0 and the key's id and scopes.
 type Actor struct {
 	TenantID int64
 	UserID   int64
 	Name     string
 	Role     string
+	KeyID    int64
+	Scopes   []string
 }
+
+// HasScope reports whether an API-key actor holds scope.
+func (a Actor) HasScope(scope string) bool {
+	for _, s := range a.Scopes {
+		if s == scope {
+			return true
+		}
+	}
+	return false
+}
+
+// SetActor stores the actor in the gin context.
+func SetActor(c *gin.Context, a Actor) { c.Set(actorKey, a) }
 
 // IsManager reports whether the actor is owner or manager.
 func (a Actor) IsManager() bool { return a.Role == RoleOwner || a.Role == RoleManager }
