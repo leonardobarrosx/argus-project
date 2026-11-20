@@ -18,6 +18,7 @@ import (
 	"github.com/leonardobarrosx/argus/backend/internal/httpx"
 	"github.com/leonardobarrosx/argus/backend/internal/middleware"
 	"github.com/leonardobarrosx/argus/backend/internal/stock"
+	"github.com/leonardobarrosx/argus/backend/internal/webhooks"
 )
 
 // Order is a service order.
@@ -106,7 +107,7 @@ func Create(ctx context.Context, tx pgx.Tx, actor middleware.Actor, in Insert) (
 	if err := tx.QueryRow(ctx, `UPDATE tenants SET os_seq = os_seq + 1 WHERE id=$1 RETURNING os_seq`, actor.TenantID).Scan(&number); err != nil {
 		return Order{}, err
 	}
-	return Scan(tx.QueryRow(ctx, `
+	o, err := Scan(tx.QueryRow(ctx, `
 		INSERT INTO service_orders (tenant_id, number, patient_id, prescription_id, frame_product_id, lens_product_id,
 		                            lens_id, lens_description, lens_qty_used, total, paid, sale_id, due_date, notes,
 		                            created_by, production_started_at)
@@ -115,6 +116,10 @@ func Create(ctx context.Context, tx pgx.Tx, actor middleware.Actor, in Insert) (
 		actor.TenantID, number, in.PatientID, in.PrescriptionID, in.FrameProductID, in.LensProductID, in.LensID,
 		in.LensDescription, in.LensQtyUsed, httpx.Round2(in.Total), in.Paid, in.SaleID, httpx.NullIfEmpty(in.DueDate),
 		in.Notes, actor.UserID))
+	if err != nil {
+		return o, err
+	}
+	return o, webhooks.Emit(ctx, tx, "order.created", o)
 }
 
 // ValidPrescription checks the prescription belongs to the patient and is not expired.
@@ -304,8 +309,10 @@ func (h *Handler) Advance(c *gin.Context) {
 		default:
 			return httpx.Unprocessable("INVALID_STATUS", fmt.Sprintf("OS %s não pode avançar (status: %s)", Label(number), cur.Status))
 		}
-		o, err = Scan(tx.QueryRow(ctx, q, cur.ID))
-		return err
+		if o, err = Scan(tx.QueryRow(ctx, q, cur.ID)); err != nil {
+			return err
+		}
+		return webhooks.Emit(ctx, tx, "order.status_changed", gin.H{"order": o, "previousStatus": cur.Status})
 	})
 	if err != nil {
 		httpx.Fail(c, err)
@@ -353,7 +360,10 @@ func (h *Handler) Cancel(c *gin.Context) {
 		o, err = Scan(tx.QueryRow(ctx, `
 			UPDATE service_orders SET status='cancelled', notes = TRIM(notes || ' [Cancelada: ' || $2 || ']')
 			WHERE id=$1 RETURNING `+Columns, cur.ID, strings.TrimSpace(in.Reason)))
-		return err
+		if err != nil {
+			return err
+		}
+		return webhooks.Emit(ctx, tx, "order.cancelled", gin.H{"order": o, "reason": strings.TrimSpace(in.Reason)})
 	})
 	if err != nil {
 		httpx.Fail(c, err)

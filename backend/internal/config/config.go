@@ -29,6 +29,18 @@ type Config struct {
 	// Brute-force protection on public auth endpoints (per client IP).
 	LoginPerMinute  int
 	RegisterPerHour int
+
+	// SecretsKey cifra segredos guardados no banco (segredos de webhook e
+	// chaves de IA das óticas). Se vazio, é derivado do JWT_SECRET.
+	SecretsKey string
+	// WebhookAllowPrivate permite webhooks em http:// e em IPs privados/loopback.
+	// Use só em desenvolvimento e testes (proteção contra SSRF).
+	WebhookAllowPrivate bool
+	// AnthropicAPIKey é a chave padrão do assistente de IA (a ótica pode
+	// cadastrar a própria). AnthropicBaseURL troca o endpoint (testes/proxy).
+	AnthropicAPIKey  string
+	AnthropicBaseURL string
+	AIDefaultModel   string
 }
 
 // Load reads configuration from environment variables (.env optional).
@@ -64,6 +76,11 @@ func Load() (*Config, error) {
 		RateLimitBurst:         envInt("RATE_LIMIT_BURST", 100),
 		LoginPerMinute:         envInt("LOGIN_RATE_PER_MINUTE", 20),
 		RegisterPerHour:        envInt("REGISTER_RATE_PER_HOUR", 10),
+		SecretsKey:             envStr("SECRETS_KEY", "argus-secrets:"+secret),
+		WebhookAllowPrivate:    envBool("WEBHOOK_ALLOW_PRIVATE", false),
+		AnthropicAPIKey:        os.Getenv("ANTHROPIC_API_KEY"),
+		AnthropicBaseURL:       os.Getenv("ANTHROPIC_BASE_URL"),
+		AIDefaultModel:         envStr("AI_DEFAULT_MODEL", "claude-opus-5-5"),
 	}, nil
 }
 

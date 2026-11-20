@@ -22,6 +22,7 @@ import (
 	"github.com/leonardobarrosx/argus/backend/internal/middleware"
 	"github.com/leonardobarrosx/argus/backend/internal/orders"
 	"github.com/leonardobarrosx/argus/backend/internal/stock"
+	"github.com/leonardobarrosx/argus/backend/internal/webhooks"
 )
 
 // PaymentMethods accepted by the PDV.
@@ -114,6 +115,20 @@ func attachItems(ctx context.Context, tx pgx.Tx, list []Sale) error {
 		}
 	}
 	return rows.Err()
+}
+
+// Query returns the sales matching where (a SQL condition over the sales
+// table using $1…$n for args), newest first, with their items.
+func Query(ctx context.Context, tx pgx.Tx, where string, args ...any) ([]Sale, error) {
+	rows, err := tx.Query(ctx, `SELECT `+saleColumns+` FROM sales WHERE `+where+` ORDER BY created_at DESC, id DESC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	out, err := db.CollectRows(rows, scanSale)
+	if err != nil {
+		return nil, err
+	}
+	return out, attachItems(ctx, tx, out)
 }
 
 // List returns every sale with its items (newest first).
@@ -464,6 +479,9 @@ func (h *Handler) Create(c *gin.Context) {
 			}
 			res.Products = append(res.Products, p)
 		}
+		if sale != nil {
+			return webhooks.Emit(ctx, tx, "sale.created", gin.H{"sale": sale, "orders": res.Orders})
+		}
 		return nil
 	})
 	if err != nil {
@@ -545,7 +563,13 @@ func (h *Handler) PayOrder(c *gin.Context) {
 			return err
 		}
 		order, err = orders.Scan(tx.QueryRow(ctx, `UPDATE service_orders SET paid=true, sale_id=$2 WHERE id=$1 RETURNING `+orders.Columns, o.ID, sale.ID))
-		return err
+		if err != nil {
+			return err
+		}
+		if err := webhooks.Emit(ctx, tx, "sale.created", gin.H{"sale": sale, "orders": []orders.Order{order}}); err != nil {
+			return err
+		}
+		return webhooks.Emit(ctx, tx, "order.paid", gin.H{"order": order, "saleId": sale.ID})
 	})
 	if err != nil {
 		httpx.Fail(c, err)
@@ -668,7 +692,7 @@ func (h *Handler) Cancel(c *gin.Context) {
 			}
 			res.Products = append(res.Products, p)
 		}
-		return nil
+		return webhooks.Emit(ctx, tx, "sale.cancelled", gin.H{"sale": res.Sale, "orders": res.Orders, "reason": reason})
 	})
 	if err != nil {
 		httpx.Fail(c, err)
