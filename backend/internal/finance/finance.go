@@ -15,6 +15,7 @@ import (
 	"github.com/leonardobarrosx/argus/backend/internal/db"
 	"github.com/leonardobarrosx/argus/backend/internal/httpx"
 	"github.com/leonardobarrosx/argus/backend/internal/middleware"
+	"github.com/leonardobarrosx/argus/backend/internal/webhooks"
 )
 
 // Payable is an account payable.
@@ -97,7 +98,11 @@ func InsertPayable(ctx context.Context, tx pgx.Tx, actor middleware.Actor, in Pa
 		in.DueDate, strings.TrimSpace(in.InvoiceNumber), actor.UserID).Scan(&id); err != nil {
 		return Payable{}, err
 	}
-	return getPayable(ctx, tx, id)
+	p, err := getPayable(ctx, tx, id)
+	if err != nil {
+		return p, err
+	}
+	return p, webhooks.Emit(ctx, tx, "payable.created", p)
 }
 
 // Handler exposes the finance routes.
@@ -191,8 +196,10 @@ func (h *Handler) Pay(c *gin.Context) {
 			}
 			return httpx.Unprocessable("INVALID_STATUS", "apenas contas pendentes podem ser pagas")
 		}
-		p, err = getPayable(ctx, tx, id)
-		return err
+		if p, err = getPayable(ctx, tx, id); err != nil {
+			return err
+		}
+		return webhooks.Emit(ctx, tx, "payable.paid", p)
 	})
 	if err != nil {
 		httpx.Fail(c, err)
@@ -302,14 +309,18 @@ type Commission struct {
 }
 
 func parsePeriod(c *gin.Context) (string, string, error) {
+	return Period(c.Query("from"), c.Query("to"))
+}
+
+// Period validates a YYYY-MM-DD range, defaulting to the current month up to
+// today, with at most 2 years.
+func Period(from, to string) (string, string, error) {
 	now := time.Now()
-	from := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
-	to := now.Format("2006-01-02")
-	if f := c.Query("from"); f != "" {
-		from = f
+	if from == "" {
+		from = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
 	}
-	if t := c.Query("to"); t != "" {
-		to = t
+	if to == "" {
+		to = now.Format("2006-01-02")
 	}
 	if !httpx.ValidDate(from) || !httpx.ValidDate(to) || from > to {
 		return "", "", httpx.Unprocessable("INVALID_PERIOD", "período inválido")
@@ -344,6 +355,18 @@ func (h *Handler) Summary(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"summary": s})
 }
+
+// ComputeSummary builds the financial summary of [from, to] (validated dates).
+func ComputeSummary(ctx context.Context, tx pgx.Tx, from, to string) (Summary, error) {
+	s := Summary{From: from, To: to}
+	return s, computeSummary(ctx, tx, &s)
+}
+
+// PayableSelect is the SELECT … FROM for payables, matching ScanPayable.
+const PayableSelect = `SELECT ` + payableColumns + payableFrom
+
+// ScanPayable reads a Payable.
+func ScanPayable(row db.Row) (Payable, error) { return scanPayable(row) }
 
 func computeSummary(ctx context.Context, tx pgx.Tx, s *Summary) error {
 	const salesInPeriod = `status = 'completed' AND created_at::date BETWEEN $1::date AND $2::date`

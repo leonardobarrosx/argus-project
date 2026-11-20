@@ -44,9 +44,14 @@ func main() {
 	}
 	defer pool.Close()
 
+	handler, dispatcher := router.Build(cfg, pool)
+	dispatchCtx, stopDispatcher := context.WithCancel(ctx)
+	defer stopDispatcher()
+	go dispatcher.Run(dispatchCtx)
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           router.New(cfg, pool),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -65,6 +70,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("shutting down...")
+	stopDispatcher()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {

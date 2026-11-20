@@ -28,6 +28,8 @@ const PAGE_ROLES: Record<PageKey, Role[]> = {
   finance: MANAGERS,
   collaborators: MANAGERS,
   reports: MANAGERS,
+  assistant: MANAGERS,
+  integrations: MANAGERS,
   settings: ALL,
 }
 

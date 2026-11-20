@@ -17,6 +17,7 @@ import (
 	"github.com/leonardobarrosx/argus/backend/internal/finance"
 	"github.com/leonardobarrosx/argus/backend/internal/httpx"
 	"github.com/leonardobarrosx/argus/backend/internal/middleware"
+	"github.com/leonardobarrosx/argus/backend/internal/webhooks"
 )
 
 // ─── Products ────────────────────────────────────────────────────────────────
@@ -71,11 +72,15 @@ func GetProduct(ctx context.Context, tx pgx.Tx, id int64, lock bool) (Product, e
 
 // ChangeQty atomically adds delta to the product quantity and returns the
 // quantities before/after. Fails with INSUFFICIENT_STOCK if it would go negative.
+//
+// When an outgoing change makes the product reach its minimum it emits the
+// stock.low webhook event.
 func ChangeQty(ctx context.Context, tx pgx.Tx, productID int64, delta int) (prev, next int, name string, err error) {
+	var minQty int
 	err = tx.QueryRow(ctx, `
 		UPDATE products SET qty = qty + $2, updated_at = NOW()
 		WHERE id = $1 AND qty + $2 >= 0
-		RETURNING qty - $2, qty, name`, productID, delta).Scan(&prev, &next, &name)
+		RETURNING qty - $2, qty, name, min_qty`, productID, delta).Scan(&prev, &next, &name, &minQty)
 	if errors.Is(err, pgx.ErrNoRows) {
 		p, gerr := GetProduct(ctx, tx, productID, false)
 		if gerr != nil {
@@ -83,6 +88,13 @@ func ChangeQty(ctx context.Context, tx pgx.Tx, productID int64, delta int) (prev
 		}
 		return 0, 0, "", httpx.Unprocessable("INSUFFICIENT_STOCK",
 			fmt.Sprintf("estoque insuficiente para %s (disponível: %d)", p.Name, p.Qty))
+	}
+	if err == nil && delta < 0 && minQty > 0 && prev > minQty && next <= minQty {
+		p, gerr := GetProduct(ctx, tx, productID, false)
+		if gerr != nil {
+			return prev, next, name, gerr
+		}
+		err = webhooks.Emit(ctx, tx, "stock.low", p)
 	}
 	return prev, next, name, err
 }
@@ -191,6 +203,12 @@ func scanMovement(row db.Row) (Movement, error) {
 		&m.PrescriptionID, &m.InvoiceNumber, &m.PreviousQty, &m.NewQty, &m.CreatedAt)
 	return m, err
 }
+
+// MovementColumns is the SELECT list matching ScanMovement.
+const MovementColumns = movementColumns
+
+// ScanMovement reads a Movement.
+func ScanMovement(row db.Row) (Movement, error) { return scanMovement(row) }
 
 // ListMovements returns the most recent movements (newest first).
 func ListMovements(ctx context.Context, tx pgx.Tx, limit int) ([]Movement, error) {

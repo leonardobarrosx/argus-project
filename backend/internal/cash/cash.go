@@ -16,6 +16,7 @@ import (
 	"github.com/leonardobarrosx/argus/backend/internal/db"
 	"github.com/leonardobarrosx/argus/backend/internal/httpx"
 	"github.com/leonardobarrosx/argus/backend/internal/middleware"
+	"github.com/leonardobarrosx/argus/backend/internal/webhooks"
 )
 
 // CashMethod is the payment method counted as physical cash in the drawer.
@@ -280,7 +281,7 @@ func (h *Handler) Close(c *gin.Context) {
 			return err
 		}
 		s.Summary = open.Summary
-		return nil
+		return webhooks.Emit(ctx, tx, "cash.closed", s)
 	})
 	if err != nil {
 		httpx.Fail(c, err)

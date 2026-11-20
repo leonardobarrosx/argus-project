@@ -75,3 +75,11 @@ export function printOrder(o: ServiceOrder, tenant: Tenant, patient: Patient | u
     <div class="foot">${esc(tenant.receiptFooter)}</div>`
   open(html, o.id)
 }
+
+/** Prints an assistant report. bodyHtml is markup React already rendered (escaped). */
+export function printReport(t: Tenant, title: string, bodyHtml: string) {
+  const css = `<style>.report p, .report ul, .report ol { margin: 8px 0; } .report ul, .report ol { padding-left: 20px; }
+    .report [role=heading] { font-weight: 700; font-size: 14px; margin-top: 16px; } .report pre { background: #f1f5f9; padding: 8px; border-radius: 6px; white-space: pre-wrap; }
+    .report blockquote { border-left: 3px solid #94a3b8; margin: 8px 0; padding-left: 10px; color: #475569; }</style>`
+  open(header(t, 'Relatório', new Date().toLocaleString('pt-BR')) + css + `<h2>${esc(title)}</h2><div class="report">${bodyHtml}</div>`, title)
+}
