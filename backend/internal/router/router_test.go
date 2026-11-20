@@ -21,6 +21,7 @@ import (
 	"github.com/leonardobarrosx/argus/backend/internal/config"
 	"github.com/leonardobarrosx/argus/backend/internal/db"
 	"github.com/leonardobarrosx/argus/backend/internal/router"
+	"github.com/leonardobarrosx/argus/backend/internal/webhooks"
 )
 
 // Integration tests run against a real PostgreSQL:
@@ -31,9 +32,11 @@ import (
 // Without TEST_DATABASE_URL the tests are skipped.
 
 var (
-	srv     *httptest.Server
-	appPool *pgxpool.Pool
-	seq     atomic.Int64
+	srv        *httptest.Server
+	appPool    *pgxpool.Pool
+	seq        atomic.Int64
+	dispatcher *webhooks.Dispatcher
+	fakeClaude *httptest.Server
 )
 
 func TestMain(m *testing.M) {
@@ -61,14 +64,20 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
+	fakeClaude = httptest.NewServer(http.HandlerFunc(fakeClaudeHandler))
 	cfg := &config.Config{
 		JWTSecret: "test-secret-test-secret-test-secret-123", JWTAccessExpiryMinutes: 15, JWTRefreshExpiryDays: 7,
 		CookieSecure: false, GinMode: gin.TestMode, CORSOrigins: "http://localhost:5173",
 		RateLimitRate: 1000, RateLimitBurst: 1000, LoginPerMinute: 10000, RegisterPerHour: 100000,
+		SecretsKey: "test-secrets-key", WebhookAllowPrivate: true,
+		AnthropicBaseURL: fakeClaude.URL, AIDefaultModel: "claude-opus-5-5",
 	}
-	srv = httptest.NewServer(router.New(cfg, appPool))
+	var handler http.Handler
+	handler, dispatcher = router.Build(cfg, appPool)
+	srv = httptest.NewServer(handler)
 	code := m.Run()
 	srv.Close()
+	fakeClaude.Close()
 	appPool.Close()
 	os.Exit(code)
 }

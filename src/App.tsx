@@ -61,6 +61,8 @@ import { CashPage } from './pages/CashPage'
 import { FinancePage } from './pages/FinancePage'
 import { SuppliersPage } from './pages/SuppliersPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { AssistantPage } from './pages/AssistantPage'
+import { IntegrationsPage, type IntegrationsTab } from './pages/IntegrationsPage'
 
 const STATUS_LABELS: Record<ServiceOrder['status'], string> = {
   production: 'Em produção', ready: 'Pronto', delivered: 'Entregue', cancelled: 'Cancelada',
@@ -168,6 +170,7 @@ export default function App({ boot, onLogout, onReload }: { boot: BootstrapDTO; 
   // ── Navigation (filtered by role) ──
   const nav = useMemo(() => NAV.filter(n => canSeePage(role, n.key)), [role])
   const goTo = useCallback((p: PageKey) => setPage(canSeePage(role, p) ? p : 'overview'), [role])
+  const [integrationsTab, setIntegrationsTab] = useState<IntegrationsTab>('keys')
 
   // ── User menu ──
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -936,6 +939,9 @@ export default function App({ boot, onLogout, onReload }: { boot: BootstrapDTO; 
             {page === 'collaborators' && <CollaboratorsPage collaborators={collaborators} currentUserId={me.id}
               onNew={() => { setEditCollabId(null); setNewCollabForm(EMPTY_COLLAB); setNewCollabOpen(true) }}
               onEdit={startEditCollaborator} onToggleActive={toggleCollaboratorActive} />}
+            {page === 'assistant' && <AssistantPage tenant={tenant} notify={notify}
+              onOpenSettings={() => { setIntegrationsTab('ai'); goTo('integrations') }} />}
+            {page === 'integrations' && <IntegrationsPage tab={integrationsTab} onTabChange={setIntegrationsTab} notify={notify} />}
             {page === 'settings' && <SettingsPage tenant={tenant} user={me} lenses={lenses} canManage={isManager}
               onSaveTenant={saveTenant} onChangePassword={changePassword} onSaveLens={saveLens} />}
           </div>

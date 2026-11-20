@@ -9,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/leonardobarrosx/argus/backend/internal/ai"
+	"github.com/leonardobarrosx/argus/backend/internal/apikeys"
 	"github.com/leonardobarrosx/argus/backend/internal/auth"
 	"github.com/leonardobarrosx/argus/backend/internal/bootstrap"
 	"github.com/leonardobarrosx/argus/backend/internal/cash"
@@ -17,15 +19,31 @@ import (
 	"github.com/leonardobarrosx/argus/backend/internal/middleware"
 	"github.com/leonardobarrosx/argus/backend/internal/orders"
 	"github.com/leonardobarrosx/argus/backend/internal/patients"
+	"github.com/leonardobarrosx/argus/backend/internal/publicapi"
 	"github.com/leonardobarrosx/argus/backend/internal/sales"
+	"github.com/leonardobarrosx/argus/backend/internal/secretbox"
 	"github.com/leonardobarrosx/argus/backend/internal/stock"
 	"github.com/leonardobarrosx/argus/backend/internal/suppliers"
 	"github.com/leonardobarrosx/argus/backend/internal/team"
 	"github.com/leonardobarrosx/argus/backend/internal/tenant"
+	"github.com/leonardobarrosx/argus/backend/internal/webhooks"
 )
 
 // New builds the configured Gin engine.
 func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
+	r, _ := Build(cfg, pool)
+	return r
+}
+
+// Build returns the Gin engine and the webhook dispatcher, which the caller
+// runs in the background (Dispatcher.Run).
+func Build(cfg *config.Config, pool *pgxpool.Pool) (*gin.Engine, *webhooks.Dispatcher) {
+	box, err := secretbox.New(cfg.SecretsKey)
+	if err != nil {
+		panic(err) // config.Load always sets a key
+	}
+	dispatcher := webhooks.NewDispatcher(pool, box, webhooks.NewHTTPClient(cfg.WebhookAllowPrivate))
+
 	r := gin.New()
 	r.Use(gin.Recovery())
 	if cfg.GinMode != gin.TestMode {
@@ -74,9 +92,22 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	sales.Register(authed, sales.NewHandler(pool))
 	cash.Register(authed, cash.NewHandler(pool))
 	finance.Register(authed, finance.NewHandler(pool))
+	apikeys.Register(authed, apikeys.NewHandler(pool))
+	webhooks.Register(authed, webhooks.NewHandler(pool, box, dispatcher, cfg.WebhookAllowPrivate))
+	ai.Register(authed, ai.NewHandler(pool, box, ai.Options{
+		ServerAPIKey: cfg.AnthropicAPIKey, BaseURL: cfg.AnthropicBaseURL, DefaultModel: cfg.AIDefaultModel,
+	}))
+
+	// Public API for integrations: API key auth, rate limit per key.
+	v1 := r.Group("/api/v1",
+		middleware.IPRateLimit(cfg.RateLimitRate*2, cfg.RateLimitBurst*2),
+		apikeys.Authenticate(pool),
+		middleware.UserRateLimit(cfg.RateLimitRate, cfg.RateLimitBurst),
+	)
+	publicapi.Register(v1, publicapi.NewHandler(pool))
 
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "rota não encontrada", "code": "NOT_FOUND"})
 	})
-	return r
+	return r, dispatcher
 }

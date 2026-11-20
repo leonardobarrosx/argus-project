@@ -15,6 +15,7 @@ import (
 	"github.com/leonardobarrosx/argus/backend/internal/db"
 	"github.com/leonardobarrosx/argus/backend/internal/httpx"
 	"github.com/leonardobarrosx/argus/backend/internal/middleware"
+	"github.com/leonardobarrosx/argus/backend/internal/webhooks"
 )
 
 // Patient is a client or dependent.
@@ -88,6 +89,15 @@ func scanRx(row db.Row) (Prescription, error) {
 // ListPrescriptions returns all prescriptions of the tenant.
 func ListPrescriptions(ctx context.Context, tx pgx.Tx) ([]Prescription, error) {
 	rows, err := tx.Query(ctx, `SELECT `+rxColumns+` FROM prescriptions ORDER BY exam_date DESC, id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	return db.CollectRows(rows, scanRx)
+}
+
+// PrescriptionsOf returns the prescriptions of one patient (newest first).
+func PrescriptionsOf(ctx context.Context, tx pgx.Tx, patientID int64) ([]Prescription, error) {
+	rows, err := tx.Query(ctx, `SELECT `+rxColumns+` FROM prescriptions WHERE patient_id=$1 ORDER BY exam_date DESC, id DESC`, patientID)
 	if err != nil {
 		return nil, err
 	}
@@ -179,6 +189,28 @@ func validatePatient(ctx context.Context, tx pgx.Tx, in PatientInput, selfID int
 	return nil
 }
 
+// Columns is the SELECT list matching Scan.
+const Columns = patientColumns
+
+// Scan reads a Patient.
+func Scan(row db.Row) (Patient, error) { return scanPatient(row) }
+
+// Insert validates and creates a patient, emitting patient.created.
+func Insert(ctx context.Context, tx pgx.Tx, tenantID int64, in PatientInput) (Patient, error) {
+	if err := validatePatient(ctx, tx, in, 0); err != nil {
+		return Patient{}, err
+	}
+	p, err := scanPatient(tx.QueryRow(ctx, `
+		INSERT INTO patients (tenant_id, parent_id, name, cpf, phone, email, birth_date, notes)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8) RETURNING `+patientColumns,
+		tenantID, in.ParentID, strings.TrimSpace(in.Name), normalizeCPF(in.CPF), strings.TrimSpace(in.Phone),
+		strings.TrimSpace(in.Email), httpx.NullIfEmpty(in.BirthDate), strings.TrimSpace(in.Notes)))
+	if err != nil {
+		return p, err
+	}
+	return p, webhooks.Emit(ctx, tx, "patient.created", p)
+}
+
 // List returns patients.
 // GET /api/patients
 func (h *Handler) List(c *gin.Context) {
@@ -207,15 +239,8 @@ func (h *Handler) Create(c *gin.Context) {
 	ctx := c.Request.Context()
 	var p Patient
 	err := db.TenantTx(ctx, h.pool, a.TenantID, func(tx pgx.Tx) error {
-		if err := validatePatient(ctx, tx, in, 0); err != nil {
-			return err
-		}
 		var err error
-		p, err = scanPatient(tx.QueryRow(ctx, `
-			INSERT INTO patients (tenant_id, parent_id, name, cpf, phone, email, birth_date, notes)
-			VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8) RETURNING `+patientColumns,
-			a.TenantID, in.ParentID, strings.TrimSpace(in.Name), normalizeCPF(in.CPF), strings.TrimSpace(in.Phone),
-			strings.TrimSpace(in.Email), httpx.NullIfEmpty(in.BirthDate), strings.TrimSpace(in.Notes)))
+		p, err = Insert(ctx, tx, a.TenantID, in)
 		return err
 	})
 	if err != nil {
